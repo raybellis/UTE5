@@ -1,11 +1,39 @@
 ; vim: ts=8:sw=8
 
-		.export	OSRDCH   := $FFE0
-		.export	OSASCI   := $FFE3
-		.export	OSNEWL   := $FFE7
-		.export	OSWRCH   := $FFEE
-		.export	OSWORD   := $FFF1
-		.export	OSBYTE   := $FFF4
+;
+; BBC MOS Entry Points
+;
+		OSRDCH  	:= $FFE0
+		OSASCI		:= $FFE3
+		OSNEWL		:= $FFE7
+		OSWRCH		:= $FFEE
+		OSWORD		:= $FFF1
+		OSBYTE		:= $FFF4
+
+;
+; Zero page variables
+;
+		_cursor_x	:= $76
+		_cursor_y	:= $77
+		_jmp_vec	:= $78
+		_baud		:= $87
+		_mode		:= $88
+		_rows		:= $89
+		_cols		:= $8A
+
+;
+; Other constants
+;
+		ESC		= $1B
+
+		VDU_RIGHT	= 9
+		VDU_MODE	= 22
+		VDU_GVIEWPORT	= 24
+		VDU_PLOT	= 25
+		VDU_ORIGIN	= 29
+		VDU_TAB_XY	= 31
+
+		BAUD_9600	= 7
 
 .segment "STARTUP"
 
@@ -14,14 +42,17 @@
 .org		$8000
 
 .scope		Header
+
 		jmp		LangEntry		; language entry
 		jmp		ServiceEntry		; service entry
+
 		.byte		$c2			; ROM type
 		.byte		<Copyright - 1		; (C) pointer
 		.byte		$05			; major version
-Title:		.asciiz		"Unix terminal emulator *UTE5"
-		.asciiz		""
-Copyright:	.asciiz		"(C) Clive D. Rodgers 1985"
+
+Title:		.byte		"Unix terminal emulator *UTE5",0,0
+Copyright:	.byte		"(C) Clive D. Rodgers 1985",0
+
 .endscope
 
 .proc		ServiceEntry
@@ -58,38 +89,55 @@ L8063:    	inx
 		tay
 		pla
 		rts
-.endproc
 
+		; enter language ROM
 L8074:		lda		#$8e
 		ldx		$f4
-		jsr		OSBYTE			; enter language ROM
+		jsr		OSBYTE
+
+.endproc
 
 L807B:		.byte		"UTE5", $ff
 
-LangEntry:	cli
+.proc		LangEntry
+
+		cli
+
+		; initialise stack
 		ldx		#$FF
 		txs
+
+		; set default parameters
 		lda		#$00
 		sta		$70
 		sta		$72
 		sta		$73
 		sta		$86
-		sta		$88
-		lda		#$07
-		sta		$87
-		lda		#$1F
-		sta		$89
-		lda		#$4F
-		sta		$8A
-L809C:		jsr		L85E3
+		sta		_mode
+
+		; set initial baud rate
+		lda		#BAUD_9600
+		sta		_baud
+
+		; set screen size
+		lda		#32 - 1
+		sta		_rows
+		lda		#80 - 1
+		sta		_cols
+
+L809C:		jsr		SetSerialRate
+
 		lda		#$E5
 		ldx		#$01
 		ldy		#$00
 		jsr		OSBYTE
-		lda		#$16
+
+		; set display mode
+		lda		#VDU_MODE
 		jsr		OSWRCH
-		lda		$88
+		lda		_mode
 		jsr		OSWRCH
+
 		lda		#$0F
 		ldx		#$00
 		jsr		OSBYTE
@@ -118,7 +166,7 @@ L809C:		jsr		L85E3
 		lda		#$14
 		ldx		#$01
 		jsr		OSBYTE
-		jsr		L85F2
+		jsr		SetupBell
 		ldx		#$0A
 		ldy		#$00
 L80F9:		lda		L8659,Y
@@ -136,43 +184,58 @@ L8110:		ldx		$72
 		jmp		L8101
 L811A:		jsr		L81EC
 		jmp		L8101
+.endproc
 
-L8120:		lda		#$80
+L8120:		; read serial output buffer status
+		lda		#$80
 		ldx		#$FD
 		ldy		#$FF
 		jsr		OSBYTE
 		cpx		#$02
 		bcc		L8152
+
+		; read keyboard buffer status
 		lda		#$80
 		ldx		#$FF
 		ldy		#$FF
 		jsr		OSBYTE
 		cpx		#$01
 		bcc		L8152
+
+		; enable keyboard and serial and read character
 		lda		#$02
 		ldx		#$02
 		jsr		OSBYTE
 		jsr		OSRDCH
-		cmp		#$1B
+
+		cmp		#ESC
 		bne		L814B
 		jsr		L826C
 L814B:		jsr		L816F
 		tay
-		jsr		L8166
+		jsr		WriteBuffer
+
 L8152:		jsr		L827E
 		cpx		#$01
 		bcc		L8120
+
+		; enable serial and read character
 		lda		#$02
 		ldx		#$01
 		jsr		OSBYTE
 		jsr		OSRDCH
 		sta		$75
+
 		rts
 
-L8166:		lda		#$8A
-		ldx		L8634
+.proc		WriteBuffer
+
+		lda		#$8A
+		ldx		_buffer_num
 		jsr		OSBYTE
 		rts
+
+.endproc
 
 L816F:		cmp		#$80
 		bcc		L818B
@@ -181,14 +244,17 @@ L816F:		cmp		#$80
 		pha
 		ldy		L818C,X
 		beq		L8185
-		ldy		#$1B
-		jsr		L8166
-		ldy		#$6F
-		jsr		L8166
+
+		ldy		#ESC
+		jsr		WriteBuffer
+		ldy		#'o'
+		jsr		WriteBuffer
+
 L8185:		pla
 		tax
 		inx
 		lda		L818C,X
+
 L818B:		rts
 
 L818C:		.byte		$1B
@@ -288,15 +354,17 @@ L818C:		.byte		$1B
 		.byte		$1B
 		.byte		$3E
 
-L81EC:		lda		#$86
+L81EC:		; get cursor position
+		lda		#$86
 		jsr		OSBYTE
-		stx		$76
-		sty		$77
+		stx		_cursor_x
+		sty		_cursor_y
+
 		clc
 		lda		#$01
-		adc		$8A
+		adc		_cols
 		sec
-		sbc		$76
+		sbc		_cursor_x
 		sta		$74
 		lda		$75
 		cmp		#$7F
@@ -313,18 +381,21 @@ L820F:		pha
 		sta		$75
 		dec		$74
 		bne		L8205
-		lda		#$1F
+
+		; move cursor right
+		lda		#VDU_TAB_XY
 		jsr		OSWRCH
-		inc		$76
-		lda		$76
+		inc		_cursor_x
+		lda		_cursor_x
 		jsr		OSWRCH
-		lda		$77
+		lda		_cursor_y
 		jsr		OSWRCH
 		rts
 
-L822E:		lda		$76
+L822E:		lda		_cursor_x
 		bne		L8233
 		rts
+
 L8233:		lda		#$87
 		jsr		OSBYTE
 		txa
@@ -343,32 +414,44 @@ L823D:		pha
 		jsr		OSWRCH
 		lda		#$20
 		jsr		OSWRCH
-		lda		#$1F
+
+		; move cursor left
+		lda		#VDU_TAB_XY
 		jsr		OSWRCH
-		dec		$76
-		lda		$76
+		dec		_cursor_x
+		lda		_cursor_x
 		jsr		OSWRCH
-		lda		$77
+		lda		_cursor_y
 		jsr		OSWRCH
 		rts
 
-L826C:		lda		#$81
+.proc		L826C
+
+		; test CTRL key
+		lda		#$81
 		ldx		#$FE
 		ldy		#$FF
 		jsr		OSBYTE
+
 		lda		#$1B
 		inx
 		beq		L827B
 		rts
 L827B:		jmp		L8663
 
-L827E:		lda		#$02
+.endproc
+
+L827E:		; enable serial input
+		lda		#$02
 		ldx		#$01
 		jsr		OSBYTE
+
+		; check for control key
 		lda		#$80
 		ldx		#$FE
 		ldy		#$FF
 		jsr		OSBYTE
+
 		lda		$86
 		bne		L8293
 		rts
@@ -379,7 +462,7 @@ L8298:		lda		$70
 		lda		#$01
 		sta		$70
 		ldy		#$13
-		jsr		L8166
+		jsr		WriteBuffer
 		rts
 L82A6:		cpx		L8633
 		bcs		L82B8
@@ -388,18 +471,19 @@ L82A6:		cpx		L8633
 		lda		#$00
 		sta		$70
 		ldy		#$11
-		jsr		L8166
+		jsr		WriteBuffer
 L82B8:		rts
 
-L82B9:		asl		A
+.proc		L82B9
+		asl		A
 		tax
-		lda		JmpTable1,X
-		sta		$78
+		lda		_jmp_table1,X
+		sta		_jmp_vec
 		inx
-		lda		JmpTable1,X
+		lda		_jmp_table1,X
 		beq		L82CB
-		sta		$79
-		jmp		($0078)
+		sta		_jmp_vec + 1
+		jmp		(_jmp_vec)
 
 L82CB:		lda		$75
 		and		#$1F
@@ -407,14 +491,14 @@ L82CB:		lda		$75
 		lda		$78
 		bne		L82D7
 		rts
-
 L82D7:		jsr		L8120
 		jsr		OSWRCH
 		dec		$71
 		bne		L82D7
 		rts
+.endproc
 
-JmpTable1:
+_jmp_table1:
 		.word		$0000
 		.word		$0001
 		.word		$0000
@@ -424,7 +508,7 @@ JmpTable1:
 		.word		L859F
 		.word		$0000
 		.word		$0000
-		.word		L858D
+		.word		Tabstop
 		.word		$0000
 		.word		$0000
 		.word		$0000
@@ -432,12 +516,12 @@ JmpTable1:
 		.word		L8452
 		.word		L846E
 		.word		L848F
-		.word		L83CC
+		.word		SetForeground
 		.word		L83DA
-		.word		L849C
+		.word		SetPalette
 		.word		$0000
 		.word		L84BD
-		.word		L84F6
+		.word		SetMode
 		.word		$0009
 		.word		$0008
 		.word		$0005
@@ -446,24 +530,24 @@ JmpTable1:
 		.word		L85AD
 		.word		$0004
 		.word		$0000
+		.word		L85A5
 
-		lda		$85
 L8322:		jsr		L8120
 		and		#$1F
 		asl		A
 		tax
-		lda		JmpTable2,X
-		sta		$78
+		lda		_jmp_table_2,X
+		sta		_jmp_vec
 		inx
-		lda		JmpTable2,X
-		sta		$79
-		jmp		($0078)
+		lda		_jmp_table_2,X
+		sta		_jmp_vec + 1
+		jmp		(_jmp_vec)
 
-JmpTable2:	.word		L8377
+_jmp_table_2:	.word		L8377
 		.word		L8377
-		.word		L8378
+		.word		StartBASIC
 		.word		L8377
-		.word		L8393
+		.word		SetTextMode
 		.word		L8377
 		.word		L8377
 		.word		L8377
@@ -471,44 +555,61 @@ JmpTable2:	.word		L8377
 		.word		L83A1
 		.word		L8377
 		.word		L8377
-		.word		L83B1
+		.word		SetBaud
 		.word		L8377
 		.word		L8377
 		.word		L83A6
 		.word		L8377
-		.word		L83BC
+		.word		SetBackground
 		.word		L83F0
-		.word		L8408
-		.word		L841D
+		.word		SetTextInverse
+		.word		SetTextDefault
 		.word		L843D
 		.word		L8432
 		.word		L8377
-		.word		L8522
-		.word		L8534
-		.word		L8548
+		.word		SetGViewport
+		.word		PlotLine
+		.word		PlotPoint
 		.word		L8377
 		.word		L8377
-		.word		L855E
+		.word		SetOrigin
 		.word		L8377
 		.word		L8377
 
 L8377:		rts
 
-L8378:		lda		#$1A
+.proc		StartBASIC
+
+		; reset viewports
+		lda		#$1A
 		jsr		OSWRCH
+
+		; clear screen
 		lda		#$0C
 		jsr		OSWRCH
+
+		; set escape
 		lda		#$E5
 		ldx		#$00
 		jsr		OSBYTE
+
+		; get BASIC ROM slot number
 		lda		#$BB
 		jsr		OSBYTE
+
+		; start the BASIC ROM
 		lda		#$8E
 		jmp		OSBYTE
 
-L8393:		lda		#$04
+.endproc
+
+.proc		SetTextMode
+
+		lda		#$04
 		jsr		OSWRCH
 		rts
+
+.endproc
 
 L8399:		jsr		L8120
 		and		#$01
@@ -525,13 +626,19 @@ L83A8:		sta		$72
 		sta		$D0
 		rts
 
-L83B1:		jsr		L8120
+.proc		SetBaud
+
+		jsr		L8120
 		and		#$0F
-		sta		$87
-		jsr		L85E3
+		sta		_baud
+		jsr		SetSerialRate
 		rts
 
-L83BC:		lda		#$11
+.endproc
+
+.proc		SetBackground
+
+		lda		#$11
 		jsr		OSWRCH
 		jsr		L8120
 		and		#$0F
@@ -539,13 +646,20 @@ L83BC:		lda		#$11
 		jsr		OSWRCH
 		rts
 
-L83CC:		lda		#$11
+.endproc
+
+.proc		SetForeground
+
+		lda		#$11
 		jsr		OSWRCH
 		jsr		L8120
 		and		#$0F
 		jsr		OSWRCH
 		rts
 
+.endproc
+
+		; gcol foreground
 L83DA:		lda		#$12
 		jsr		OSWRCH
 		jsr		L8120
@@ -556,6 +670,7 @@ L83DA:		lda		#$12
 		jsr		OSWRCH
 		rts
 
+		; gcol background
 L83F0:		lda		#$12
 		jsr		OSWRCH
 		jsr		L8120
@@ -567,7 +682,8 @@ L83F0:		lda		#$12
 		jsr		OSWRCH
 		rts
 
-L8408:		lda		#$11
+.proc		SetTextInverse
+		lda		#$11
 		jsr		OSWRCH
 		lda		#$00
 		jsr		OSWRCH
@@ -576,8 +692,11 @@ L8408:		lda		#$11
 		lda		#$87
 		jsr		OSWRCH
 		rts
+.endproc
 
-L841D:		lda		#$11
+.proc		SetTextDefault
+
+		lda		#$11
 		jsr		OSWRCH
 		lda		#$07
 		jsr		OSWRCH
@@ -586,6 +705,8 @@ L841D:		lda		#$11
 		lda		#$80
 		jsr		OSWRCH
 		rts
+
+.endproc
 
 L8432:		lda		#$07
 		sta		$83
@@ -604,12 +725,14 @@ L8449:		lda		L864D,Y
 		bne		L8449
 		rts
 
-L8452:		lda		#$86
+L8452:		; get cursor position
+		lda		#$86
 		jsr		OSBYTE
 		stx		$7C
 		sty		$7B
+
 		sty		$7D
-		lda		$89
+		lda		_rows
 		sta		$7A
 		ldx		#$0B
 		ldy		#$00
@@ -623,7 +746,7 @@ L846E:		lda		#$86
 		stx		$80
 		sty		$7F
 		sty		$82
-		lda		$89
+		lda		_rows
 		sta		$7E
 		sec
 		sbc		$7F
@@ -642,7 +765,9 @@ L8496:		lda		#$10
 		jsr		OSWRCH
 		rts
 
-L849C:		lda		#$13
+.proc		SetPalette
+
+		lda		#$13
 		jsr		OSWRCH
 		jsr		L8120
 		and		#$0F
@@ -656,101 +781,133 @@ L849C:		lda		#$13
 		jsr		OSWRCH
 		rts
 
-L84BD:		lda		#$86
+.endproc
+
+L84BD:		; get current cursor position
+		lda		#$86
 		jsr		OSBYTE
-		sty		$77
-		stx		$76
+		sty		_cursor_y
+		stx		_cursor_x
+
 		clc
 		lda		#$01
-		adc		$8A
+		adc		_cols
 		sec
-		sbc		$76
+		sbc		_cursor_x
 		tax
 		beq		L84EE
 		jsr		L85DC
-L84D4:		lda		#$20
+L84D4:		lda		#' '
 		jsr		OSWRCH
 		dex
 		bne		L84D4
 		jsr		L85DC
-		lda		#$1F
+
+		; reset cursor position
+		lda		#VDU_TAB_XY
 		jsr		OSWRCH
-		lda		$76
+		lda		_cursor_x
 		jsr		OSWRCH
-		lda		$77
+		lda		_cursor_y
 		jsr		OSWRCH
-L84EE:		lda		#$07
-		ldx		$87
+
+L84EE:		; set serial receive rate
+		lda		#$07
+		ldx		_baud
 		jsr		OSBYTE
 		rts
 
-L84F6:		lda		#$16
+.proc		SetMode
+
+		lda		#VDU_MODE
 		jsr		OSWRCH
+
 		jsr		L8120
 		and		#$07
-		sta		$88
+		sta		_mode
 		jsr		OSWRCH
-		ldx		$88
-		lda		L851A,X
-		sta		$8A
-		lda		L8512,X
-		sta		$89
+
+		ldx		_mode
+		lda		_mode_cols,X
+		sta		_cols
+		lda		_mode_rows,X
+		sta		_rows
 		rts
+
+.endproc
 
 		; screen mode rows - 1
-L8512:		.byte		$1F
-		.byte		$1F
-		.byte		$1F
-		.byte		$18
-		.byte		$1F
-		.byte		$1F
-		.byte		$18
-		.byte		$18
+_mode_rows:	.byte		32 - 1
+		.byte		32 - 1
+		.byte		32 - 1
+		.byte		25 - 1
+		.byte		32 - 1
+		.byte		32 - 1
+		.byte		25 - 1
+		.byte		25 - 1
 
 		; screen mode cols - 1
-L851A:		.byte		$4F
-		.byte		$27
-		.byte		$13
-		.byte		$4F
-		.byte		$27
-		.byte		$13
-		.byte		$27
-		.byte		$27
+_mode_cols:	.byte		80 - 1
+		.byte		40 - 1
+		.byte		20 - 1
+		.byte		80 - 1
+		.byte		40 - 1
+		.byte		20 - 1
+		.byte		40 - 1
+		.byte		40 - 1
 
-L8522:		lda		#$18
+.proc		SetGViewport
+
+		lda		#VDU_GVIEWPORT
 		jsr		OSWRCH
-		jsr		L856A
-		jsr		L856A
-		jsr		L856A
-		jsr		L856A
+		jsr		ReadCoord
+		jsr		ReadCoord
+		jsr		ReadCoord
+		jsr		ReadCoord
 		rts
 
-L8534:		lda		#$19
+.endproc
+
+.proc		PlotLine
+
+		lda		#VDU_PLOT
 		jsr		OSWRCH
 		jsr		L8120
 		and		#$3F
 		jsr		OSWRCH
-		jsr		L856A
-		jsr		L856A
+		jsr		ReadCoord
+		jsr		ReadCoord
 		rts
 
-L8548:		lda		#$19
+.endproc
+
+.proc		PlotPoint
+
+		lda		#VDU_PLOT
 		jsr		OSWRCH
 		jsr		L8120
 		and		#$3F
 		eor		#$40
 		jsr		OSWRCH
-		jsr		L856A
-		jsr		L856A
+		jsr		ReadCoord
+		jsr		ReadCoord
 		rts
 
-L855E:		lda		#$1D
+.endproc
+
+.proc		SetOrigin
+
+		lda		#VDU_ORIGIN
 		jsr		OSWRCH
-		jsr		L856A
-		jsr		L856A
+		jsr		ReadCoord
+		jsr		ReadCoord
 		rts
 
-L856A:		jsr		L8120
+.endproc
+
+.proc		ReadCoord
+
+		jsr		L8120
 		and		#$3F
 		pha
 		lsr		A
@@ -772,21 +929,28 @@ L856A:		jsr		L8120
 		jsr		OSWRCH
 		rts
 
-L858D:		lda		#$86
+.endproc
+
+.proc		Tabstop
+
+		lda		#$86
 		jsr		OSBYTE
 		txa
 		ora		#$F8
 		tax
-		lda		#$09
-L8598:		jsr		OSWRCH
+		lda		#VDU_RIGHT
+@loop:		jsr		OSWRCH
 		inx
-		bne		L8598
+		bne		@loop
 		rts
+
+.endproc
 
 L859F:		lda		#$09
 		jsr		OSWRCH
 		rts
-		lda		#$1F
+
+L85A5:		lda		#VDU_TAB_XY
 		jsr		OSWRCH
 		jmp		L85B8
 
@@ -821,38 +985,57 @@ L85DC:		lda		$D0
 		sta		$D0
 		rts
 
-L85E3:		lda		#$08
-		ldx		$87
+.proc		SetSerialRate
+
+		; set serial transmit rate
+		lda		#$08
+		ldx		_baud
 		jsr		OSBYTE
+
+		; set serial receive rate
 		lda		#$07
-		ldx		$87
+		ldx		_baud
 		jsr		OSBYTE
 		rts
 
-L85F2:		lda		#$08
-		ldx		L8622
-		ldy		L8623
+.endproc
+
+.proc		SetupBell
+
+		; set envelope
+		lda		#$08
+		ldx		_env_ptr
+		ldy		_env_ptr + 1
 		jsr		OSWORD
+
+		; set bell to channel 1
 		lda		#$D3
 		ldx		#$01
 		ldy		#$00
 		jsr		OSBYTE
+
+		; select envelope 1 for bell
 		lda		#$D4
 		ldx		#$00
 		ldy		#$00
 		jsr		OSBYTE
+
+		; set bell frequency
 		lda		#$D5
 		ldx		#$84
 		ldy		#$00
 		jsr		OSBYTE
+
+		; set bell duration
 		lda		#$D6
 		ldx		#$0A
 		ldy		#$00
 		jsr		OSBYTE
 		rts
 
-L8622:		.byte		$24
-L8623:		.byte		$86
+.endproc
+
+_env_ptr:	.word		* + 2
 		.byte		$01
 		.byte		$01
 		.byte		$00
@@ -867,9 +1050,11 @@ L8623:		.byte		$86
 		.byte		$FF
 		.byte		$7D
 		.byte		$5A
+
 L8632:		.byte		$C8
 L8633:		.byte		$32
-L8634:		.byte		$02
+_buffer_num:	.byte		$02
+
 L8635:		.byte		$1C
 		.byte		$00
 		.byte		$8A
@@ -920,94 +1105,128 @@ L8659:		.byte		$17
 		.byte		$00
 		.byte		$00
 
-L8663:		ldx		#$00
-		jsr		L86E3
-L8668:		ldx		#$9E
-		jsr		L86E3
-		lda		$88
+L8663:		ldx		#(_strings - _strings)
+		jsr		OutString
+
+L8668:		; tab to 25, 5
+		ldx		#(_s_tab_25_5 - _strings)
+		jsr		OutString
+
+		; show the screen mode
+		lda		_mode
 		clc
-		adc		#$30
+		adc		#'0'
 		jsr		OSWRCH
-		ldx		#$A2
-		jsr		L86E3
-		lda		$87
+
+		; tab to 25, 7
+		ldx		#(_s_tab_25_7 - _strings)
+		jsr		OutString
+
+		; display baud rate
+		lda		_baud
 		asl		A
 		clc
-		adc		$87
+		adc		_baud
 		asl		A
 		clc
-		adc		#$A0
+		adc		#(_s_baud_table - _strings) - 6
 		tax
-		jsr		L86E3
-		ldx		#$D6
-		jsr		L86E3
+		jsr		OutString
+
+		; tab to 25, 9
+		ldx		#(_s_tab_25_9 - _strings)
+		jsr		OutString
+
+		; show flow control
 		lda		$86
-		beq		L8696
-		ldx		#$E3
-		jmp		L8698
-L8696:		ldx		#$DA
-L8698:		jsr		L86E3
-L869B:		lda		#$02
+		beq		@hardware
+		ldx		#(_s_xon_xoff - _strings)
+		jmp		@handshake
+@hardware:	ldx		#(_s_hardware - _strings)
+@handshake:	jsr		OutString
+
+@loop:		; enable keyboard and serial input and read a keyboard character
+		lda		#$02
 		ldx		#$02
 		jsr		OSBYTE
 		jsr		OSRDCH
+
+		; mask off 0x20 (lower case)
 		and		#$5F
-		cmp		#$4D
-		beq		L86BE
-		cmp		#$4C
-		beq		L86C9
-		cmp		#$48
-		beq		L86D4
-		cmp		#$42
-		beq		L86DD
-		cmp		#$1B
-		beq		L86E0
-		jmp		L869B
-L86BE:		ldx		$88
+
+		cmp		#'M'
+		beq		@set_mode
+
+		cmp		#'L'
+		beq		@set_speed
+
+		cmp		#'H'
+		beq		@set_handshake
+
+		cmp		#'B'
+		beq		@basic
+
+		cmp		#ESC
+		beq		@emulator
+
+		jmp		@loop
+
+@set_mode:	ldx		$88
 		inx
 		txa
 		and		#$07
 		sta		$88
 		jmp		L8668
-L86C9:		lda		$87
+
+@set_speed:	lda		_baud
 		and		#$07
 		tax
 		inx
 		stx		$87
 		jmp		L8668
-L86D4:		lda		$86
+
+@set_handshake:	lda		$86
 		eor		#$01
 		sta		$86
 		jmp		L8668
-L86DD:		jmp		L8378
-L86E0:		jmp		L809C
 
-L86E3:		lda		L86F0,X
-		beq		L86EF
+@basic:		jmp		StartBASIC
+
+@emulator:	jmp		LangEntry::L809C
+
+.proc		OutString
+
+@loop:		lda		_strings,X
+		beq		@exit
 		jsr		OSWRCH
 		inx
-		jmp		L86E3
-L86EF:		rts
+		jmp		@loop
+@exit:		rts
 
-L86F0:		.byte		22,7,31
-		.byte		9,1
+.endproc
+
+_strings:	.byte		VDU_MODE,7
+		.byte		VDU_TAB_XY,9,1
 		.byte		"Unix Terminal Emulator"
-		.byte		31,8,5
+		.byte		VDU_TAB_XY,8,5
 		.byte		"M   Screen Mode"
-		.byte		31,8,7
+		.byte		VDU_TAB_XY,8,7
 		.byte		"L   Line Speed"
-		.byte		31,8,9
+		.byte		VDU_TAB_XY,8,9
 		.byte		"H   Handshake"
-		.byte		31,8,14
+		.byte		VDU_TAB_XY,8,14
 		.byte		"B   To BASIC"
-		.byte		31,7,18
+		.byte		VDU_TAB_XY,7,18
 		.byte		"ESC   Return To Emulator"
-		.byte		31,1,24
+		.byte		VDU_TAB_XY,1,24
 		.byte		"Use key indicated to toggle or act"
 		.byte		0
-		.byte		31,25,5,0
-		.byte		31,25,7,0
-		.byte		"75   ",0
+
+_s_tab_25_5:	.byte		VDU_TAB_XY,25,5,0
+
+_s_tab_25_7:	.byte		VDU_TAB_XY,25,7,0
+
+_s_baud_table:	.byte		"75   ",0
 		.byte		"150  ",0
 		.byte		"300  ",0
 		.byte		"1200 ",0
@@ -1015,9 +1234,12 @@ L86F0:		.byte		22,7,31
 		.byte		"4800 ",0
 		.byte		"9600 ",0
 		.byte		"19200",0
-		.byte		31,25,9,0
-		.byte		"hardware",0
-		.byte		"xon/xoff",0
+
+_s_tab_25_9:	.byte		VDU_TAB_XY,25,9,0
+
+_s_hardware:	.byte		"hardware",0
+
+_s_xon_xoff:	.byte		"xon/xoff",0
 
 		.repeat		$8800 - *
 		.byte		$00
