@@ -302,7 +302,7 @@ Main:		jsr		SetSerialRate
 		tay
 		jsr		WriteToBuffer
 
-@no_data:	jsr		L827E
+@no_data:	jsr		CheckSerial
 		cpx		#$01
 		bcc		GetNext
 
@@ -471,6 +471,8 @@ Main:		jsr		SetSerialRate
 		lda		#$87
 		jsr		OSBYTE
 		txa
+
+		; replace with space if not recognised
 		bne		@l2
 		lda		#' '
 
@@ -525,7 +527,7 @@ Main:		jsr		SetSerialRate
 
 ;----------------------------------------------------------------------
 
-.proc		L827E
+.proc		CheckSerial
 
 		; enable (only) serial input
 		lda		#$02
@@ -538,22 +540,26 @@ Main:		jsr		SetSerialRate
 		ldy		#$FF
 		jsr		OSBYTE
 
+		; finish if using hardware handshake
 		lda		_handshake
 		bne		@l1
 		rts
 
+		; send XON if buffer space is available
 @l1:		cpx		_buffer_max
 		bcc		SendXON
 
-.endproc	; fall through
+.endproc	; or fall through and send XOFF
 
 ;----------------------------------------------------------------------
 
 .proc		SendXOFF
 
+		; check if XOFF was already sent
 		lda		_xoff
 		bne		SendXDone
 
+		; set XOFF flag status
 		lda		#$01
 		sta		_xoff
 
@@ -566,12 +572,15 @@ Main:		jsr		SetSerialRate
 
 .proc		SendXON
 
+		; check if buffer space is available
 		cpx		_buffer_min
 		bcs		SendXDone
 
+		; check XOFF flag status
 		lda		_xoff
 		beq		SendXDone
 
+		; clear XOFF flag status
 		lda		#$00
 		sta		_xoff
 
@@ -642,7 +651,7 @@ SendXDone:	rts
 		.word		SetViewport
 		.word		$0004
 		.word		$0000
-		.word		L85A5
+		.word		TabXY
 
 .endproc
 
@@ -916,6 +925,7 @@ Noop:		rts
 ;----------------------------------------------------------------------
 
 .proc		L8452
+
 		; get cursor position
 		lda		#$86
 		jsr		OSBYTE
@@ -927,7 +937,7 @@ Noop:		rts
 
 		ldx		#$0B
 		ldy		#$00
-@loop:		lda		L8635,Y
+@loop:		lda		_s_vc1,Y
 		jsr		OutVarChar
 		bne		@loop
 		rts
@@ -951,7 +961,7 @@ Noop:		rts
 		sta		$81
 		ldx		#$0D
 		ldy		#$00
-@loop:		lda		L8640,Y
+@loop:		lda		_s_vc2,Y
 		jsr		OutVarChar
 		bne		@loop
 		rts
@@ -1189,11 +1199,11 @@ _mode_cols:	.byte		80 - 1
 
 ;----------------------------------------------------------------------
 
-.proc		L85A5
+.proc		TabXY
 
 		lda		#VDU_TAB_XY
 		jsr		OSWRCH
-		jmp		L85B8
+		jmp		GetCoord8x2
 
 .endproc
 
@@ -1203,24 +1213,24 @@ _mode_cols:	.byte		80 - 1
 
 		lda		#VDU_VIEWPORT
 		jsr		OSWRCH
-		jsr		L85BF
-		jsr		L85BF
+		jsr		GetCoord8
+		jsr		GetCoord8
 
 .endproc	; fallthrough
 
 ;----------------------------------------------------------------------
 
-.proc		L85B8
+.proc		GetCoord8x2
 
-		jsr		L85BF
-		jsr		L85BF
+		jsr		GetCoord8
+		jsr		GetCoord8
 		rts
 
 .endproc
 
 ;----------------------------------------------------------------------
 
-.proc		L85BF
+.proc		GetCoord8
 
 		jsr		GetNext
 		clc
@@ -1349,45 +1359,45 @@ _buffer_num:	.byte		$02
 ; VarChar strings for use with OutVarChar
 ;
 
-.macro		varchar		addr
+.macro		varptr		addr
 		.byte		(addr - $70) | $80
 .endmacro
 
-L8635:		.byte		VDU_VIEWPORT
+_s_vc1:		.byte		VDU_VIEWPORT
 		.byte		0
-		varchar		_var_7A
-		varchar		_cols
-		varchar		_var_7B
+		varptr		_var_7A
+		varptr		_cols
+		varptr		_var_7B
 		.byte		VDU_HOME
 		.byte		VDU_UP
 		.byte		VDU_RESTORE
 		.byte		VDU_TAB_XY
-		varchar		_var_7C
-		varchar		_var_7D
+		varptr		_var_7C
+		varptr		_var_7D
 
-L8640:		.byte		VDU_VIEWPORT
+_s_vc2:		.byte		VDU_VIEWPORT
 		.byte		0
-		varchar		_var_7E
-		varchar		_cols
-		varchar		_var_7F
+		varptr		_var_7E
+		varptr		_cols
+		varptr		_var_7F
 		.byte		VDU_TAB_XY
 		.byte		0
-		varchar		_var_81
+		varptr		_var_81
 		.byte		VDU_DOWN
 		.byte		VDU_RESTORE
 		.byte		VDU_TAB_XY
-		varchar		_var_80
-		varchar		_var_82
+		varptr		_var_80
+		varptr		_var_82
 
 _s_set_palette:	.byte		VDU_PALETTE
 		.byte		0
-		varchar		_palette_fg
+		varptr		_palette_fg
 		.byte		0
 		.byte		0
 		.byte		0
 		.byte		VDU_PALETTE
 		.byte		7
-		varchar		_palette_bg
+		varptr		_palette_bg
 		.byte		0
 		.byte		0
 		.byte		0
@@ -1551,10 +1561,10 @@ _s_hardware:	.byte		"hardware",0
 _s_xon_xoff:	.byte		"xon/xoff",0
 
 .endproc
-		.repeat		$8800 - *
-		.byte		$00
-		.endrep
 
-		.repeat		$a000 - *
-		.byte		$ff
-		.endrep
+;----------------------------------------------------------------------
+;
+; filler bytes
+;
+		.res		$8800 - *, $00
+		.res		$a000 - *, $ff
