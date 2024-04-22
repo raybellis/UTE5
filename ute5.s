@@ -15,7 +15,7 @@
 ;
 ; BBC MOS Variables
 ;
-		OS_VDU_STATUS	:= $D0
+		VDU_STATUS	:= $D0
 		VEC_STAR_CMD	:= $F2
 
 ;----------------------------------------------------------------------
@@ -52,25 +52,26 @@
 		XOFF		= $13
 		ESC		= $1B
 
-		VDU_TEXT	= 4
-		VDU_LEFT	= 8
-		VDU_RIGHT	= 9
-		VDU_DOWN	= 10
-		VDU_UP		= 11
-		VDU_CLS		= 12
-		VDU_CLG		= 16
-		VDU_COLOUR	= 17
-		VDU_GCOL	= 18
-		VDU_PALETTE	= 19
-		VDU_MODE	= 22
-		VDU_GVIEWPORT	= 24
-		VDU_23		= 23
-		VDU_PLOT	= 25
-		VDU_RESTORE	= 26
-		VDU_VIEWPORT	= 28
-		VDU_ORIGIN	= 29
-		VDU_HOME	= 30
-		VDU_TAB_XY	= 31
+.scope		VDU
+		TEXT		= 4
+		LEFT		= 8
+		RIGHT		= 9
+		DOWN		= 10
+		UP		= 11
+		CLS		= 12
+		CLG		= 16
+		COLOUR		= 17
+		GCOL		= 18
+		PALETTE		= 19
+		MODE		= 22
+		GVIEWPORT	= 24
+		PLOT		= 25
+		RESTORE		= 26
+		VIEWPORT	= 28
+		ORIGIN		= 29
+		HOME		= 30
+		TAB_XY		= 31
+.endscope
 
 		BAUD_9600	= 7
 
@@ -191,7 +192,7 @@ Main:		jsr		SetSerialRate
 		jsr		OSBYTE
 
 		; set display mode
-		lda		#VDU_MODE
+		lda		#VDU::MODE
 		jsr		OSWRCH
 		lda		_mode
 		jsr		OSWRCH
@@ -442,7 +443,7 @@ Main:		jsr		SetSerialRate
 		bne		@l1
 
 		; move cursor right
-		lda		#VDU_TAB_XY
+		lda		#VDU::TAB_XY
 		jsr		OSWRCH
 		inc		_cursor_x
 		lda		_cursor_x
@@ -477,21 +478,21 @@ Main:		jsr		SetSerialRate
 		lda		#' '
 
 @l2:		pha
-		lda		#VDU_LEFT
+		lda		#VDU::LEFT
 		jsr		OSWRCH
 		pla
 		jsr		OSWRCH
-		lda		#VDU_RIGHT
+		lda		#VDU::RIGHT
 		jsr		OSWRCH
 		dec		$74
 		bne		L8233
-		lda		#VDU_LEFT
+		lda		#VDU::LEFT
 		jsr		OSWRCH
 		lda		#' '
 		jsr		OSWRCH
 
 		; move cursor left
-		lda		#VDU_TAB_XY
+		lda		#VDU::TAB_XY
 		jsr		OSWRCH
 		dec		_cursor_x
 		lda		_cursor_x
@@ -712,11 +713,11 @@ Noop:		rts
 .proc		StartBASIC
 
 		; reset viewports
-		lda		#VDU_RESTORE
+		lda		#VDU::RESTORE
 		jsr		OSWRCH
 
 		; clear screen
-		lda		#VDU_CLS
+		lda		#VDU::CLS
 		jsr		OSWRCH
 
 		; set default escape mode
@@ -738,7 +739,7 @@ Noop:		rts
 
 .proc		SetTextMode
 
-		lda		#VDU_TEXT
+		lda		#VDU::TEXT
 		jsr		OSWRCH
 		rts
 
@@ -777,9 +778,9 @@ Noop:		rts
 .proc		L83A8
 
 		sta		$72
-		lda		OS_VDU_STATUS
+		lda		VDU_STATUS
 		eor		#$02
-		sta		OS_VDU_STATUS
+		sta		VDU_STATUS
 		rts
 
 .endproc
@@ -800,7 +801,7 @@ Noop:		rts
 
 .proc		SetBackground
 
-		lda		#VDU_COLOUR
+		lda		#VDU::COLOUR
 		jsr		OSWRCH
 		jsr		GetNext
 		and		#$0F
@@ -814,7 +815,7 @@ Noop:		rts
 
 .proc		SetForeground
 
-		lda		#VDU_COLOUR
+		lda		#VDU::COLOUR
 		jsr		OSWRCH
 		jsr		GetNext
 		and		#$0F
@@ -827,7 +828,7 @@ Noop:		rts
 
 .proc		SetGForeground
 
-		lda		#VDU_GCOL
+		lda		#VDU::GCOL
 		jsr		OSWRCH
 		jsr		GetNext
 		and		#$07
@@ -843,7 +844,7 @@ Noop:		rts
 
 .proc		SetGBackground
 
-		lda		#VDU_GCOL
+		lda		#VDU::GCOL
 		jsr		OSWRCH
 		jsr		GetNext
 		and		#$07
@@ -976,7 +977,7 @@ Noop:		rts
 		beq		@l1
 		jsr		SendXOFF
 
-@l1:		lda		#VDU_CLG
+@l1:		lda		#VDU::CLG
 		jsr		OSWRCH
 		rts
 
@@ -1028,7 +1029,7 @@ Noop:		rts
 		jsr		ToggleScroll
 
 		; reset cursor position
-		lda		#VDU_TAB_XY
+		lda		#VDU::TAB_XY
 		jsr		OSWRCH
 		lda		_cursor_x
 		jsr		OSWRCH
@@ -1047,7 +1048,7 @@ Noop:		rts
 
 .proc		SetMode
 
-		lda		#VDU_MODE
+		lda		#VDU::MODE
 		jsr		OSWRCH
 
 		jsr		GetNext
@@ -1086,7 +1087,7 @@ _mode_cols:	.byte		80 - 1
 
 .proc		SetGViewport
 
-		lda		#VDU_GVIEWPORT
+		lda		#VDU::GVIEWPORT
 		jsr		OSWRCH
 		jsr		GetCoord
 		jsr		GetCoord
@@ -1100,7 +1101,7 @@ _mode_cols:	.byte		80 - 1
 
 .proc		PlotLine
 
-		lda		#VDU_PLOT
+		lda		#VDU::PLOT
 		jsr		OSWRCH
 		jsr		GetNext
 		and		#$3F
@@ -1115,7 +1116,7 @@ _mode_cols:	.byte		80 - 1
 
 .proc		PlotPoint
 
-		lda		#VDU_PLOT
+		lda		#VDU::PLOT
 		jsr		OSWRCH
 		jsr		GetNext
 		and		#$3F
@@ -1131,7 +1132,7 @@ _mode_cols:	.byte		80 - 1
 
 .proc		SetOrigin
 
-		lda		#VDU_ORIGIN
+		lda		#VDU::ORIGIN
 		jsr		OSWRCH
 		jsr		GetCoord
 		jsr		GetCoord
@@ -1179,7 +1180,7 @@ _mode_cols:	.byte		80 - 1
 		txa
 		ora		#$F8
 		tax
-		lda		#VDU_RIGHT
+		lda		#VDU::RIGHT
 @loop:		jsr		OSWRCH
 		inx
 		bne		@loop
@@ -1191,7 +1192,7 @@ _mode_cols:	.byte		80 - 1
 
 .proc		L859F
 
-		lda		#VDU_RIGHT
+		lda		#VDU::RIGHT
 		jsr		OSWRCH
 		rts
 
@@ -1201,7 +1202,7 @@ _mode_cols:	.byte		80 - 1
 
 .proc		TabXY
 
-		lda		#VDU_TAB_XY
+		lda		#VDU::TAB_XY
 		jsr		OSWRCH
 		jmp		GetCoord8x2
 
@@ -1211,7 +1212,7 @@ _mode_cols:	.byte		80 - 1
 
 .proc		SetViewport
 
-		lda		#VDU_VIEWPORT
+		lda		#VDU::VIEWPORT
 		jsr		OSWRCH
 		jsr		GetCoord8
 		jsr		GetCoord8
@@ -1269,9 +1270,9 @@ _mode_cols:	.byte		80 - 1
 
 .proc		ToggleScroll
 
-		lda		OS_VDU_STATUS
+		lda		VDU_STATUS
 		eor		#$02
-		sta		OS_VDU_STATUS
+		sta		VDU_STATUS
 		rts
 
 .endproc
@@ -1363,46 +1364,46 @@ _buffer_num:	.byte		$02
 		.byte		(addr - $70) | $80
 .endmacro
 
-_s_vc1:		.byte		VDU_VIEWPORT
+_s_vc1:		.byte		VDU::VIEWPORT
 		.byte		0
 		varptr		_var_7A
 		varptr		_cols
 		varptr		_var_7B
-		.byte		VDU_HOME
-		.byte		VDU_UP
-		.byte		VDU_RESTORE
-		.byte		VDU_TAB_XY
+		.byte		VDU::HOME
+		.byte		VDU::UP
+		.byte		VDU::RESTORE
+		.byte		VDU::TAB_XY
 		varptr		_var_7C
 		varptr		_var_7D
 
-_s_vc2:		.byte		VDU_VIEWPORT
+_s_vc2:		.byte		VDU::VIEWPORT
 		.byte		0
 		varptr		_var_7E
 		varptr		_cols
 		varptr		_var_7F
-		.byte		VDU_TAB_XY
+		.byte		VDU::TAB_XY
 		.byte		0
 		varptr		_var_81
-		.byte		VDU_DOWN
-		.byte		VDU_RESTORE
-		.byte		VDU_TAB_XY
+		.byte		VDU::DOWN
+		.byte		VDU::RESTORE
+		.byte		VDU::TAB_XY
 		varptr		_var_80
 		varptr		_var_82
 
-_s_set_palette:	.byte		VDU_PALETTE
+_s_set_palette:	.byte		VDU::PALETTE
 		.byte		0
 		varptr		_palette_fg
 		.byte		0
 		.byte		0
 		.byte		0
-		.byte		VDU_PALETTE
+		.byte		VDU::PALETTE
 		.byte		7
 		varptr		_palette_bg
 		.byte		0
 		.byte		0
 		.byte		0
 
-_s_set_char:	.byte		VDU_23
+_s_set_char:	.byte		23
 		.byte		96
 		.byte		%00110000
 		.byte		%00011000
@@ -1524,26 +1525,26 @@ _s_set_char:	.byte		VDU_23
 
 .endproc
 
-_strings:	.byte		VDU_MODE,7
-		.byte		VDU_TAB_XY,9,1
+_strings:	.byte		VDU::MODE,7
+		.byte		VDU::TAB_XY,9,1
 		.byte		"Unix Terminal Emulator"
-		.byte		VDU_TAB_XY,8,5
+		.byte		VDU::TAB_XY,8,5
 		.byte		"M   Screen Mode"
-		.byte		VDU_TAB_XY,8,7
+		.byte		VDU::TAB_XY,8,7
 		.byte		"L   Line Speed"
-		.byte		VDU_TAB_XY,8,9
+		.byte		VDU::TAB_XY,8,9
 		.byte		"H   Handshake"
-		.byte		VDU_TAB_XY,8,14
+		.byte		VDU::TAB_XY,8,14
 		.byte		"B   To BASIC"
-		.byte		VDU_TAB_XY,7,18
+		.byte		VDU::TAB_XY,7,18
 		.byte		"ESC   Return To Emulator"
-		.byte		VDU_TAB_XY,1,24
+		.byte		VDU::TAB_XY,1,24
 		.byte		"Use key indicated to toggle or act"
 		.byte		0
 
-_s_tab_25_5:	.byte		VDU_TAB_XY,25,5,0
+_s_tab_25_5:	.byte		VDU::TAB_XY,25,5,0
 
-_s_tab_25_7:	.byte		VDU_TAB_XY,25,7,0
+_s_tab_25_7:	.byte		VDU::TAB_XY,25,7,0
 
 _s_baud_table:	.byte		"75   ",0
 		.byte		"150  ",0
@@ -1554,7 +1555,7 @@ _s_baud_table:	.byte		"75   ",0
 		.byte		"9600 ",0
 		.byte		"19200",0
 
-_s_tab_25_9:	.byte		VDU_TAB_XY,25,9,0
+_s_tab_25_9:	.byte		VDU::TAB_XY,25,9,0
 
 _s_hardware:	.byte		"hardware",0
 
