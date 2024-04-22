@@ -1,5 +1,6 @@
+;----------------------------------------------------------------------
 ; vim: ts=8:sw=8
-
+;----------------------------------------------------------------------
 ;
 ; BBC MOS Entry Points
 ;
@@ -10,34 +11,76 @@
 		OSWORD		:= $FFF1
 		OSBYTE		:= $FFF4
 
+;----------------------------------------------------------------------
+;
+; BBC MOS Variables
+;
+		OS_VDU_STATUS	:= $D0
+		VEC_STAR_CMD	:= $F2
+
+;----------------------------------------------------------------------
 ;
 ; Zero page variables
 ;
+		_xoff		:= $70
+		_next		:= $75
 		_cursor_x	:= $76
 		_cursor_y	:= $77
 		_jmp_vec	:= $78
+		_var_7A		:= $7A
+		_var_7B		:= $7B
+		_var_7C		:= $7C
+		_var_7D		:= $7D
+		_var_7E		:= $7E
+		_var_7F		:= $7F
+		_var_80		:= $80
+		_var_81		:= $81
+		_var_82		:= $82
+		_palette_fg	:= $83
+		_palette_bg	:= $84
+		_handshake	:= $86
 		_baud		:= $87
 		_mode		:= $88
 		_rows		:= $89
 		_cols		:= $8A
 
+;----------------------------------------------------------------------
 ;
 ; Other constants
 ;
+		XON		= $11
+		XOFF		= $13
 		ESC		= $1B
 
+		VDU_TEXT	= 4
+		VDU_LEFT	= 8
 		VDU_RIGHT	= 9
+		VDU_DOWN	= 10
+		VDU_UP		= 11
+		VDU_CLS		= 12
+		VDU_CLG		= 16
+		VDU_COLOUR	= 17
+		VDU_GCOL	= 18
+		VDU_PALETTE	= 19
 		VDU_MODE	= 22
 		VDU_GVIEWPORT	= 24
+		VDU_23		= 23
 		VDU_PLOT	= 25
+		VDU_RESTORE	= 26
+		VDU_VIEWPORT	= 28
 		VDU_ORIGIN	= 29
+		VDU_HOME	= 30
 		VDU_TAB_XY	= 31
 
 		BAUD_9600	= 7
 
+;----------------------------------------------------------------------
+
 .segment "STARTUP"
 
 .segment "CODE"
+
+;----------------------------------------------------------------------
 
 .org		$8000
 
@@ -55,34 +98,45 @@ Copyright:	.byte		"(C) Clive D. Rodgers 1985",0
 
 .endscope
 
+;----------------------------------------------------------------------
+
 .proc		ServiceEntry
+
 		pha
+
 		cmp		#$09
-		beq		L804C
+		beq		@help
+
 		cmp		#$04
-		beq		L805C
+		beq		@star
+
 		pla
 		rts
-L804C:		ldx		#$ff
-L804E:		inx
+
+@help:		ldx		#$ff
+@l1:		inx
 		lda		Header::Title,x
 		jsr		OSASCI
-		bne		L804E
+		bne		@l1
+
 		jsr		OSNEWL
 		pla
 		rts
-L805C:   	tya
+
+@star:   	tya
 		pha
 		txa
 		pha
+
 		ldx		#$ff
 		dey
-L8063:    	inx
+@l2:	    	inx
 		iny
-		lda		L807B,X
-		bmi		L8074
-		cmp		($f2),Y
-		beq		L8063
+		lda		_ute5,X
+		bmi		@start
+		cmp		(VEC_STAR_CMD),Y
+		beq		@l2
+
 		pla
 		tax
 		pla
@@ -91,16 +145,19 @@ L8063:    	inx
 		rts
 
 		; enter language ROM
-L8074:		lda		#$8e
-		ldx		$f4
+@start:		lda		#$8e
+		ldx		$F4
 		jsr		OSBYTE
+
+_ute5:		.byte		"UTE5", $FF
 
 .endproc
 
-L807B:		.byte		"UTE5", $ff
+;----------------------------------------------------------------------
 
 .proc		LangEntry
 
+		; enable interrupts
 		cli
 
 		; initialise stack
@@ -109,10 +166,10 @@ L807B:		.byte		"UTE5", $ff
 
 		; set default parameters
 		lda		#$00
-		sta		$70
+		sta		_xoff
 		sta		$72
 		sta		$73
-		sta		$86
+		sta		_handshake
 		sta		_mode
 
 		; set initial baud rate
@@ -125,8 +182,9 @@ L807B:		.byte		"UTE5", $ff
 		lda		#80 - 1
 		sta		_cols
 
-L809C:		jsr		SetSerialRate
+Main:		jsr		SetSerialRate
 
+		; set ESC mode to ASCII
 		lda		#$E5
 		ldx		#$01
 		ldy		#$00
@@ -138,61 +196,88 @@ L809C:		jsr		SetSerialRate
 		lda		_mode
 		jsr		OSWRCH
 
+		; flush all buffers
 		lda		#$0F
 		ldx		#$00
 		jsr		OSBYTE
+
+		; set keyboard status
 		lda		#$CA
 		ldx		#$30
 		jsr		OSBYTE
+
+		; disable cursor editing
 		ldx		#$02
 		lda		#$04
 		jsr		OSBYTE
+
+		; set function key status
 		ldy		#$00
 		ldx		#$80
 		lda		#$E1
 		jsr		OSBYTE
+
+		; set shift function key status
 		ldy		#$00
 		ldx		#$90
 		lda		#$E2
 		jsr		OSBYTE
+
+		; set control function key status
 		ldy		#$00
 		ldx		#$A0
 		lda		#$E3
 		jsr		OSBYTE
+
+		; set shift-control function key status
 		ldy		#$00
 		ldx		#$01
 		lda		#$E4
 		jsr		OSBYTE
+
+		; explode soft chars $A0 - $BF
 		lda		#$14
 		ldx		#$01
 		jsr		OSBYTE
+
 		jsr		SetupBell
+
+		; define the back-tick soft character
 		ldx		#$0A
 		ldy		#$00
-L80F9:		lda		L8659,Y
-		jsr		L85CB
-		bne		L80F9
-L8101:		jsr		L8120
+@l1:		lda		_s_set_char,Y
+		jsr		OutVarChar
+		bne		@l1
+
+		; main input processing loop
+@mainloop:	jsr		GetNext
 		and		#$7F
-		cmp		#$20
-		bcs		L8110
+		cmp		#' '
+		bcs		@l2
 		jsr		L82B9
-		jmp		L8101
-L8110:		ldx		$72
-		bne		L811A
+		jmp		@mainloop
+
+@l2:		ldx		$72
+		bne		@l3
 		jsr		OSWRCH
-		jmp		L8101
-L811A:		jsr		L81EC
-		jmp		L8101
+		jmp		@mainloop
+
+@l3:		jsr		L81EC
+		jmp		@mainloop
+
 .endproc
 
-L8120:		; read serial output buffer status
+;----------------------------------------------------------------------
+
+.proc		GetNext
+
+		; read serial output buffer status
 		lda		#$80
 		ldx		#$FD
 		ldy		#$FF
 		jsr		OSBYTE
 		cpx		#$02
-		bcc		L8152
+		bcc		@no_data
 
 		; read keyboard buffer status
 		lda		#$80
@@ -200,35 +285,41 @@ L8120:		; read serial output buffer status
 		ldy		#$FF
 		jsr		OSBYTE
 		cpx		#$01
-		bcc		L8152
+		bcc		@no_data
 
-		; enable keyboard and serial and read character
+		; enable keyboard and serial and read keyboard character
 		lda		#$02
 		ldx		#$02
 		jsr		OSBYTE
 		jsr		OSRDCH
 
+		; check if ESC was pressed
 		cmp		#ESC
-		bne		L814B
-		jsr		L826C
-L814B:		jsr		L816F
-		tay
-		jsr		WriteBuffer
+		bne		@not_esc
+		jsr		CheckCtrlEsc
 
-L8152:		jsr		L827E
+@not_esc:	jsr		L816F
+		tay
+		jsr		WriteToBuffer
+
+@no_data:	jsr		L827E
 		cpx		#$01
-		bcc		L8120
+		bcc		GetNext
 
 		; enable serial and read character
 		lda		#$02
 		ldx		#$01
 		jsr		OSBYTE
 		jsr		OSRDCH
-		sta		$75
+		sta		_next
 
 		rts
 
-.proc		WriteBuffer
+.endproc
+
+;----------------------------------------------------------------------
+
+.proc		WriteToBuffer
 
 		lda		#$8A
 		ldx		_buffer_num
@@ -237,124 +328,86 @@ L8152:		jsr		L827E
 
 .endproc
 
-L816F:		cmp		#$80
-		bcc		L818B
+;----------------------------------------------------------------------
+
+.proc		L816F
+
+		cmp		#$80
+		bcc		@l2
 		asl		A
 		tax
 		pha
-		ldy		L818C,X
-		beq		L8185
+		ldy		@table,X
+		beq		@l1
 
 		ldy		#ESC
-		jsr		WriteBuffer
+		jsr		WriteToBuffer
 		ldy		#'o'
-		jsr		WriteBuffer
+		jsr		WriteToBuffer
 
-L8185:		pla
+@l1:		pla
 		tax
 		inx
-		lda		L818C,X
+		lda		@table,X
 
-L818B:		rts
+@l2:		rts
 
-L818C:		.byte		$1B
-		.byte		$41
-		.byte		$1B
-		.byte		$42
-		.byte		$1B
-		.byte		$43
-		.byte		$1B
-		.byte		$44
-		.byte		$1B
-		.byte		$45
-		.byte		$1B
-		.byte		$46
-		.byte		$1B
-		.byte		$47
-		.byte		$1B
-		.byte		$48
-		.byte		$1B
-		.byte		$49
-		.byte		$1B
-		.byte		$4A
-		.byte		$00
-		.byte		$00
-		.byte		$1B
-		.byte		$4B
-		.byte		$00
-		.byte		$02
-		.byte		$00
-		.byte		$06
-		.byte		$00
-		.byte		$0E
-		.byte		$00
-		.byte		$10
-		.byte		$1B
-		.byte		$61
-		.byte		$1B
-		.byte		$62
-		.byte		$1B
-		.byte		$63
-		.byte		$1B
-		.byte		$64
-		.byte		$1B
-		.byte		$65
-		.byte		$1B
-		.byte		$66
-		.byte		$1B
-		.byte		$67
-		.byte		$1B
-		.byte		$68
-		.byte		$1B
-		.byte		$69
-		.byte		$1B
-		.byte		$6A
-		.byte		$00
-		.byte		$00
-		.byte		$1B
-		.byte		$6B
-		.byte		$1B
-		.byte		$6C
-		.byte		$1B
-		.byte		$6D
-		.byte		$1B
-		.byte		$6E
-		.byte		$1B
-		.byte		$6F
-		.byte		$1B
-		.byte		$30
-		.byte		$1B
-		.byte		$31
-		.byte		$1B
-		.byte		$32
-		.byte		$1B
-		.byte		$33
-		.byte		$1B
-		.byte		$34
-		.byte		$1B
-		.byte		$35
-		.byte		$1B
-		.byte		$36
-		.byte		$1B
-		.byte		$37
-		.byte		$1B
-		.byte		$38
-		.byte		$1B
-		.byte		$39
-		.byte		$00
-		.byte		$00
-		.byte		$1B
-		.byte		$3A
-		.byte		$1B
-		.byte		$3B
-		.byte		$1B
-		.byte		$3C
-		.byte		$1B
-		.byte		$3D
-		.byte		$1B
-		.byte		$3E
+@table:		.byte		$1B,$41
+		.byte		$1B,$42
+		.byte		$1B,$43
+		.byte		$1B,$44
+		.byte		$1B,$45
+		.byte		$1B,$46
+		.byte		$1B,$47
+		.byte		$1B,$48
+		.byte		$1B,$49
+		.byte		$1B,$4A
+		.byte		$00,$00
+		.byte		$1B,$4B
+		.byte		$00,$02
+		.byte		$00,$06
+		.byte		$00,$0E
+		.byte		$00,$10
+		.byte		$1B,$61
+		.byte		$1B,$62
+		.byte		$1B,$63
+		.byte		$1B,$64
+		.byte		$1B,$65
+		.byte		$1B,$66
+		.byte		$1B,$67
+		.byte		$1B,$68
+		.byte		$1B,$69
+		.byte		$1B,$6A
+		.byte		$00,$00
+		.byte		$1B,$6B
+		.byte		$1B,$6C
+		.byte		$1B,$6D
+		.byte		$1B,$6E
+		.byte		$1B,$6F
+		.byte		$1B,$30
+		.byte		$1B,$31
+		.byte		$1B,$32
+		.byte		$1B,$33
+		.byte		$1B,$34
+		.byte		$1B,$35
+		.byte		$1B,$36
+		.byte		$1B,$37
+		.byte		$1B,$38
+		.byte		$1B,$39
+		.byte		$00,$00
+		.byte		$1B,$3A
+		.byte		$1B,$3B
+		.byte		$1B,$3C
+		.byte		$1B,$3D
+		.byte		$1B,$3E
 
-L81EC:		; get cursor position
+.endproc
+
+;----------------------------------------------------------------------
+
+.proc		L81EC
+
+		; get cursor position
 		lda		#$86
 		jsr		OSBYTE
 		stx		_cursor_x
@@ -366,21 +419,27 @@ L81EC:		; get cursor position
 		sec
 		sbc		_cursor_x
 		sta		$74
-		lda		$75
+
+		lda		_next
 		cmp		#$7F
 		beq		L822E
-L8205:		lda		#$87
+
+@l1:		; read character at cursor
+		lda		#$87
 		jsr		OSBYTE
 		txa
-		bne		L820F
-		lda		#$20
-L820F:		pha
-		lda		$75
+
+		; if unknown replace with space
+		bne		@l2
+		lda		#' '
+
+@l2:		pha
+		lda		_next
 		jsr		OSWRCH
 		pla
-		sta		$75
+		sta		_next
 		dec		$74
-		bne		L8205
+		bne		@l1
 
 		; move cursor right
 		lda		#VDU_TAB_XY
@@ -392,27 +451,41 @@ L820F:		pha
 		jsr		OSWRCH
 		rts
 
-L822E:		lda		_cursor_x
+.endproc
+
+;----------------------------------------------------------------------
+
+.proc		L822E
+
+		lda		_cursor_x
 		bne		L8233
 		rts
 
-L8233:		lda		#$87
+.endproc
+
+;----------------------------------------------------------------------
+
+.proc		L8233
+
+@l1:		; read character at cursor
+		lda		#$87
 		jsr		OSBYTE
 		txa
-		bne		L823D
-		lda		#$20
-L823D:		pha
-		lda		#$08
+		bne		@l2
+		lda		#' '
+
+@l2:		pha
+		lda		#VDU_LEFT
 		jsr		OSWRCH
 		pla
 		jsr		OSWRCH
-		lda		#$09
+		lda		#VDU_RIGHT
 		jsr		OSWRCH
 		dec		$74
 		bne		L8233
-		lda		#$08
+		lda		#VDU_LEFT
 		jsr		OSWRCH
-		lda		#$20
+		lda		#' '
 		jsr		OSWRCH
 
 		; move cursor left
@@ -425,7 +498,11 @@ L823D:		pha
 		jsr		OSWRCH
 		rts
 
-.proc		L826C
+.endproc
+
+;----------------------------------------------------------------------
+
+.proc		CheckCtrlEsc
 
 		; test CTRL key
 		lda		#$81
@@ -433,72 +510,107 @@ L823D:		pha
 		ldy		#$FF
 		jsr		OSBYTE
 
-		lda		#$1B
+		; restore ESC to A
+		lda		#ESC
+
+		; return if CTRL wasn't pressed
 		inx
-		beq		L827B
+		beq		@ctrl
 		rts
-L827B:		jmp		L8663
+
+		; otherwise show the settings page
+@ctrl:		jmp		ShowSettings
 
 .endproc
 
-L827E:		; enable serial input
+;----------------------------------------------------------------------
+
+.proc		L827E
+
+		; enable (only) serial input
 		lda		#$02
 		ldx		#$01
 		jsr		OSBYTE
 
-		; check for control key
+		; check serial input buffer status
 		lda		#$80
 		ldx		#$FE
 		ldy		#$FF
 		jsr		OSBYTE
 
-		lda		$86
-		bne		L8293
+		lda		_handshake
+		bne		@l1
 		rts
-L8293:		cpx		L8632
-		bcc		L82A6
-L8298:		lda		$70
-		bne		L82B8
+
+@l1:		cpx		_buffer_max
+		bcc		SendXON
+
+.endproc	; fall through
+
+;----------------------------------------------------------------------
+
+.proc		SendXOFF
+
+		lda		_xoff
+		bne		SendXDone
+
 		lda		#$01
-		sta		$70
-		ldy		#$13
-		jsr		WriteBuffer
+		sta		_xoff
+
+		; send XOFF
+		ldy		#XOFF
+		jsr		WriteToBuffer
 		rts
-L82A6:		cpx		L8633
-		bcs		L82B8
-		lda		$70
-		beq		L82B8
+
+.endproc
+
+.proc		SendXON
+
+		cpx		_buffer_min
+		bcs		SendXDone
+
+		lda		_xoff
+		beq		SendXDone
+
 		lda		#$00
-		sta		$70
-		ldy		#$11
-		jsr		WriteBuffer
-L82B8:		rts
+		sta		_xoff
+
+		; send XON
+		ldy		#XON
+		jsr		WriteToBuffer
+
+.endproc
+
+SendXDone:	rts
+
+
+;----------------------------------------------------------------------
 
 .proc		L82B9
 		asl		A
 		tax
-		lda		_jmp_table1,X
+		lda		@jmp,X
 		sta		_jmp_vec
 		inx
-		lda		_jmp_table1,X
-		beq		L82CB
+		lda		@jmp,X
+		beq		@l1
 		sta		_jmp_vec + 1
 		jmp		(_jmp_vec)
 
-L82CB:		lda		$75
+@l1:		lda		_next
 		and		#$1F
 		jsr		OSWRCH
-		lda		$78
-		bne		L82D7
+		lda		_jmp_vec
+		bne		@l2
 		rts
-L82D7:		jsr		L8120
+
+@l2:		jsr		GetNext
 		jsr		OSWRCH
 		dec		$71
-		bne		L82D7
+		bne		@l2
 		rts
-.endproc
 
-_jmp_table1:
+@jmp:
 		.word		$0000
 		.word		$0001
 		.word		$0000
@@ -517,7 +629,7 @@ _jmp_table1:
 		.word		L846E
 		.word		L848F
 		.word		SetForeground
-		.word		L83DA
+		.word		SetGForeground
 		.word		SetPalette
 		.word		$0000
 		.word		L84BD
@@ -527,68 +639,78 @@ _jmp_table1:
 		.word		$0005
 		.word		$0000
 		.word		L8322
-		.word		L85AD
+		.word		SetViewport
 		.word		$0004
 		.word		$0000
 		.word		L85A5
 
-L8322:		jsr		L8120
+.endproc
+
+;----------------------------------------------------------------------
+
+.proc		L8322
+
+		jsr		GetNext
 		and		#$1F
 		asl		A
 		tax
-		lda		_jmp_table_2,X
+		lda		@jmp,X
 		sta		_jmp_vec
 		inx
-		lda		_jmp_table_2,X
+		lda		@jmp,X
 		sta		_jmp_vec + 1
 		jmp		(_jmp_vec)
 
-_jmp_table_2:	.word		L8377
-		.word		L8377
+@jmp:		.word		Noop
+		.word		Noop
 		.word		StartBASIC
-		.word		L8377
+		.word		Noop
 		.word		SetTextMode
-		.word		L8377
-		.word		L8377
-		.word		L8377
+		.word		Noop
+		.word		Noop
+		.word		Noop
 		.word		L8399
 		.word		L83A1
-		.word		L8377
-		.word		L8377
+		.word		Noop
+		.word		Noop
 		.word		SetBaud
-		.word		L8377
-		.word		L8377
+		.word		Noop
+		.word		Noop
 		.word		L83A6
-		.word		L8377
+		.word		Noop
 		.word		SetBackground
-		.word		L83F0
+		.word		SetGBackground
 		.word		SetTextInverse
 		.word		SetTextDefault
-		.word		L843D
-		.word		L8432
-		.word		L8377
+		.word		SetPaletteInverse
+		.word		SetPaletteDefault
+		.word		Noop
 		.word		SetGViewport
 		.word		PlotLine
 		.word		PlotPoint
-		.word		L8377
-		.word		L8377
+		.word		Noop
+		.word		Noop
 		.word		SetOrigin
-		.word		L8377
-		.word		L8377
+		.word		Noop
+		.word		Noop
 
-L8377:		rts
+Noop:		rts
+
+.endproc
+
+;----------------------------------------------------------------------
 
 .proc		StartBASIC
 
 		; reset viewports
-		lda		#$1A
+		lda		#VDU_RESTORE
 		jsr		OSWRCH
 
 		; clear screen
-		lda		#$0C
+		lda		#VDU_CLS
 		jsr		OSWRCH
 
-		; set escape
+		; set default escape mode
 		lda		#$E5
 		ldx		#$00
 		jsr		OSBYTE
@@ -603,32 +725,61 @@ L8377:		rts
 
 .endproc
 
+;----------------------------------------------------------------------
+
 .proc		SetTextMode
 
-		lda		#$04
+		lda		#VDU_TEXT
 		jsr		OSWRCH
 		rts
 
 .endproc
 
-L8399:		jsr		L8120
+;----------------------------------------------------------------------
+
+.proc		L8399
+
+		jsr		GetNext
 		and		#$01
-		sta		$86
+		sta		_handshake
 		rts
 
-L83A1:		lda		#$01
+.endproc
+
+;----------------------------------------------------------------------
+
+.proc		L83A1
+
+		lda		#$01
 		jmp		L83A8
 
-L83A6:		lda		#$00
-L83A8:		sta		$72
-		lda		$D0
+.endproc	; fallthrough
+
+;----------------------------------------------------------------------
+
+.proc		L83A6
+
+		lda		#$00
+
+.endproc	; fallthrough
+
+;----------------------------------------------------------------------
+
+.proc		L83A8
+
+		sta		$72
+		lda		OS_VDU_STATUS
 		eor		#$02
-		sta		$D0
+		sta		OS_VDU_STATUS
 		rts
+
+.endproc
+
+;----------------------------------------------------------------------
 
 .proc		SetBaud
 
-		jsr		L8120
+		jsr		GetNext
 		and		#$0F
 		sta		_baud
 		jsr		SetSerialRate
@@ -636,51 +787,67 @@ L83A8:		sta		$72
 
 .endproc
 
+;----------------------------------------------------------------------
+
 .proc		SetBackground
 
-		lda		#$11
+		lda		#VDU_COLOUR
 		jsr		OSWRCH
-		jsr		L8120
+		jsr		GetNext
 		and		#$0F
 		eor		#$80
 		jsr		OSWRCH
 		rts
 
 .endproc
+
+;----------------------------------------------------------------------
 
 .proc		SetForeground
 
-		lda		#$11
+		lda		#VDU_COLOUR
 		jsr		OSWRCH
-		jsr		L8120
+		jsr		GetNext
 		and		#$0F
 		jsr		OSWRCH
 		rts
 
 .endproc
 
-		; gcol foreground
-L83DA:		lda		#$12
+;----------------------------------------------------------------------
+
+.proc		SetGForeground
+
+		lda		#VDU_GCOL
 		jsr		OSWRCH
-		jsr		L8120
+		jsr		GetNext
 		and		#$07
 		jsr		OSWRCH
-		jsr		L8120
+		jsr		GetNext
 		and		#$0F
 		jsr		OSWRCH
 		rts
 
-		; gcol background
-L83F0:		lda		#$12
+.endproc
+
+;----------------------------------------------------------------------
+
+.proc		SetGBackground
+
+		lda		#VDU_GCOL
 		jsr		OSWRCH
-		jsr		L8120
+		jsr		GetNext
 		and		#$07
 		jsr		OSWRCH
-		jsr		L8120
+		jsr		GetNext
 		and		#$0F
 		eor		#$80
 		jsr		OSWRCH
 		rts
+
+.endproc
+
+;----------------------------------------------------------------------
 
 .proc		SetTextInverse
 		lda		#$11
@@ -693,6 +860,8 @@ L83F0:		lda		#$12
 		jsr		OSWRCH
 		rts
 .endproc
+
+;----------------------------------------------------------------------
 
 .proc		SetTextDefault
 
@@ -708,71 +877,111 @@ L83F0:		lda		#$12
 
 .endproc
 
-L8432:		lda		#$07
-		sta		$83
-		lda		#$00
-		sta		$84
-		jmp		L8445
+;----------------------------------------------------------------------
 
-L843D:		lda		#$00
-		sta		$83
+.proc		SetPaletteDefault
+
 		lda		#$07
-		sta		$84
-L8445:		ldx		#$0C
+		sta		_palette_fg
+		lda		#$00
+		sta		_palette_bg
+		jmp		WritePalette
+
+.endproc
+
+;----------------------------------------------------------------------
+
+.proc		SetPaletteInverse
+
+		lda		#$00
+		sta		_palette_fg
+		lda		#$07
+		sta		_palette_bg
+
+.endproc
+
+;----------------------------------------------------------------------
+
+.proc		WritePalette
+
+		ldx		#$0C
 		ldy		#$00
-L8449:		lda		L864D,Y
-		jsr		L85CB
-		bne		L8449
+@loop:		lda		_s_set_palette,Y
+		jsr		OutVarChar
+		bne		@loop
 		rts
 
-L8452:		; get cursor position
+.endProc
+
+;----------------------------------------------------------------------
+
+.proc		L8452
+		; get cursor position
 		lda		#$86
 		jsr		OSBYTE
-		stx		$7C
-		sty		$7B
-
+		stx		_var_7C
+		sty		_var_7B
 		sty		$7D
 		lda		_rows
-		sta		$7A
+		sta		_var_7A
+
 		ldx		#$0B
 		ldy		#$00
-L8465:		lda		L8635,Y
-		jsr		L85CB
-		bne		L8465
+@loop:		lda		L8635,Y
+		jsr		OutVarChar
+		bne		@loop
 		rts
 
-L846E:		lda		#$86
+.endproc
+
+;----------------------------------------------------------------------
+
+.proc		L846E
+
+		; get cursor position
+		lda		#$86
 		jsr		OSBYTE
 		stx		$80
-		sty		$7F
+		sty		_var_7F
 		sty		$82
 		lda		_rows
-		sta		$7E
+		sta		_var_7E
 		sec
-		sbc		$7F
+		sbc		_var_7F
 		sta		$81
 		ldx		#$0D
 		ldy		#$00
-L8486:		lda		L8640,Y
-		jsr		L85CB
-		bne		L8486
+@loop:		lda		L8640,Y
+		jsr		OutVarChar
+		bne		@loop
 		rts
 
-L848F:		lda		$86
-		beq		L8496
-		jsr		L8298
-L8496:		lda		#$10
+.endproc
+
+;----------------------------------------------------------------------
+
+.proc		L848F
+
+		lda		_handshake
+		beq		@l1
+		jsr		SendXOFF
+
+@l1:		lda		#VDU_CLG
 		jsr		OSWRCH
 		rts
+
+.endproc
+
+;----------------------------------------------------------------------
 
 .proc		SetPalette
 
 		lda		#$13
 		jsr		OSWRCH
-		jsr		L8120
+		jsr		GetNext
 		and		#$0F
 		jsr		OSWRCH
-		jsr		L8120
+		jsr		GetNext
 		and		#$0F
 		jsr		OSWRCH
 		lda		#$00
@@ -783,7 +992,11 @@ L8496:		lda		#$10
 
 .endproc
 
-L84BD:		; get current cursor position
+;----------------------------------------------------------------------
+
+.proc		L84BD
+
+		; get current cursor position
 		lda		#$86
 		jsr		OSBYTE
 		sty		_cursor_y
@@ -795,13 +1008,14 @@ L84BD:		; get current cursor position
 		sec
 		sbc		_cursor_x
 		tax
-		beq		L84EE
-		jsr		L85DC
-L84D4:		lda		#' '
+		beq		@l1
+
+		jsr		ToggleScroll
+@loop:		lda		#' '
 		jsr		OSWRCH
 		dex
-		bne		L84D4
-		jsr		L85DC
+		bne		@loop
+		jsr		ToggleScroll
 
 		; reset cursor position
 		lda		#VDU_TAB_XY
@@ -811,18 +1025,22 @@ L84D4:		lda		#' '
 		lda		_cursor_y
 		jsr		OSWRCH
 
-L84EE:		; set serial receive rate
+@l1:		; set serial receive rate
 		lda		#$07
 		ldx		_baud
 		jsr		OSBYTE
 		rts
+
+.endproc
+
+;----------------------------------------------------------------------
 
 .proc		SetMode
 
 		lda		#VDU_MODE
 		jsr		OSWRCH
 
-		jsr		L8120
+		jsr		GetNext
 		and		#$07
 		sta		_mode
 		jsr		OSWRCH
@@ -834,9 +1052,6 @@ L84EE:		; set serial receive rate
 		sta		_rows
 		rts
 
-.endproc
-
-		; screen mode rows - 1
 _mode_rows:	.byte		32 - 1
 		.byte		32 - 1
 		.byte		32 - 1
@@ -846,7 +1061,6 @@ _mode_rows:	.byte		32 - 1
 		.byte		25 - 1
 		.byte		25 - 1
 
-		; screen mode cols - 1
 _mode_cols:	.byte		80 - 1
 		.byte		40 - 1
 		.byte		20 - 1
@@ -856,58 +1070,70 @@ _mode_cols:	.byte		80 - 1
 		.byte		40 - 1
 		.byte		40 - 1
 
+.endproc
+
+;----------------------------------------------------------------------
+
 .proc		SetGViewport
 
 		lda		#VDU_GVIEWPORT
 		jsr		OSWRCH
-		jsr		ReadCoord
-		jsr		ReadCoord
-		jsr		ReadCoord
-		jsr		ReadCoord
+		jsr		GetCoord
+		jsr		GetCoord
+		jsr		GetCoord
+		jsr		GetCoord
 		rts
 
 .endproc
+
+;----------------------------------------------------------------------
 
 .proc		PlotLine
 
 		lda		#VDU_PLOT
 		jsr		OSWRCH
-		jsr		L8120
+		jsr		GetNext
 		and		#$3F
 		jsr		OSWRCH
-		jsr		ReadCoord
-		jsr		ReadCoord
+		jsr		GetCoord
+		jsr		GetCoord
 		rts
 
 .endproc
+
+;----------------------------------------------------------------------
 
 .proc		PlotPoint
 
 		lda		#VDU_PLOT
 		jsr		OSWRCH
-		jsr		L8120
+		jsr		GetNext
 		and		#$3F
 		eor		#$40
 		jsr		OSWRCH
-		jsr		ReadCoord
-		jsr		ReadCoord
+		jsr		GetCoord
+		jsr		GetCoord
 		rts
 
 .endproc
+
+;----------------------------------------------------------------------
 
 .proc		SetOrigin
 
 		lda		#VDU_ORIGIN
 		jsr		OSWRCH
-		jsr		ReadCoord
-		jsr		ReadCoord
+		jsr		GetCoord
+		jsr		GetCoord
 		rts
 
 .endproc
 
-.proc		ReadCoord
+;----------------------------------------------------------------------
 
-		jsr		L8120
+.proc		GetCoord
+
+		jsr		GetNext
 		and		#$3F
 		pha
 		lsr		A
@@ -921,7 +1147,7 @@ _mode_cols:	.byte		80 - 1
 		asl		A
 		asl		A
 		sta		$77
-		jsr		L8120
+		jsr		GetNext
 		and		#$1F
 		eor		$77
 		jsr		OSWRCH
@@ -931,10 +1157,15 @@ _mode_cols:	.byte		80 - 1
 
 .endproc
 
+;----------------------------------------------------------------------
+
 .proc		Tabstop
 
+		; get cursor position
 		lda		#$86
 		jsr		OSBYTE
+
+		; calculate 8 - (x % 8) and move cursor right that many times
 		txa
 		ora		#$F8
 		tax
@@ -946,44 +1177,96 @@ _mode_cols:	.byte		80 - 1
 
 .endproc
 
-L859F:		lda		#$09
+;----------------------------------------------------------------------
+
+.proc		L859F
+
+		lda		#VDU_RIGHT
 		jsr		OSWRCH
 		rts
 
-L85A5:		lda		#VDU_TAB_XY
+.endproc
+
+;----------------------------------------------------------------------
+
+.proc		L85A5
+
+		lda		#VDU_TAB_XY
 		jsr		OSWRCH
 		jmp		L85B8
 
-L85AD:		lda		#$1C
+.endproc
+
+;----------------------------------------------------------------------
+
+.proc		SetViewport
+
+		lda		#VDU_VIEWPORT
 		jsr		OSWRCH
 		jsr		L85BF
 		jsr		L85BF
-L85B8:		jsr		L85BF
+
+.endproc	; fallthrough
+
+;----------------------------------------------------------------------
+
+.proc		L85B8
+
+		jsr		L85BF
 		jsr		L85BF
 		rts
 
-L85BF:		jsr		L8120
+.endproc
+
+;----------------------------------------------------------------------
+
+.proc		L85BF
+
+		jsr		GetNext
 		clc
 		adc		#$E0
 		and		#$7F
 		jsr		OSWRCH
 		rts
 
-L85CB:		bpl		L85D6
+.endproc
+
+;----------------------------------------------------------------------
+;
+; Outputs the character in A, except that if A is >= $80
+; it outputs the contents of the memory $70 + (A & $1F)
+;
+; On exit, Y is incremented (for indexed addressing into
+; the string in memory) and X is decremented, for loop
+; termination
+;
+.proc		OutVarChar
+
+		bpl		@out
 		and		#$1F
 		stx		$85
 		tax
 		lda		$70,X
 		ldx		$85
-L85D6:		jsr		OSWRCH
+@out:		jsr		OSWRCH
 		iny
 		dex
 		rts
 
-L85DC:		lda		$D0
+.endproc
+
+;----------------------------------------------------------------------
+
+.proc		ToggleScroll
+
+		lda		OS_VDU_STATUS
 		eor		#$02
-		sta		$D0
+		sta		OS_VDU_STATUS
 		rts
+
+.endproc
+
+;----------------------------------------------------------------------
 
 .proc		SetSerialRate
 
@@ -1000,12 +1283,16 @@ L85DC:		lda		$D0
 
 .endproc
 
+;----------------------------------------------------------------------
+;
+; Set up the sound system for the BEL alert sound
+;
 .proc		SetupBell
 
 		; set envelope
 		lda		#$08
-		ldx		_env_ptr
-		ldy		_env_ptr + 1
+		ldx		@env
+		ldy		@env + 1
 		jsr		OSWORD
 
 		; set bell to channel 1
@@ -1033,9 +1320,7 @@ L85DC:		lda		$D0
 		jsr		OSBYTE
 		rts
 
-.endproc
-
-_env_ptr:	.word		* + 2
+@env:		.word		* + 2
 		.byte		$01
 		.byte		$01
 		.byte		$00
@@ -1051,66 +1336,85 @@ _env_ptr:	.word		* + 2
 		.byte		$7D
 		.byte		$5A
 
-L8632:		.byte		$C8
-L8633:		.byte		$32
+.endproc
+
+;----------------------------------------------------------------------
+
+_buffer_max:	.byte		200
+_buffer_min:	.byte		50
 _buffer_num:	.byte		$02
 
-L8635:		.byte		$1C
-		.byte		$00
-		.byte		$8A
-		.byte		$9A
-		.byte		$8B
-		.byte		$1E
-		.byte		$0B
-		.byte		$1A
-		.byte		$1F
-		.byte		$8C
-		.byte		$8D
+;----------------------------------------------------------------------
+;
+; VarChar strings for use with OutVarChar
+;
 
-L8640:		.byte		$1C
-		.byte		$00
-		.byte		$8E
-		.byte		$9A
-		.byte		$8F
-		.byte		$1F
-		.byte		$00
-		.byte		$91
-		.byte		$0A
-		.byte		$1A
-		.byte		$1F
-		.byte		$90
-		.byte		$92
+.macro		varchar		addr
+		.byte		(addr - $70) | $80
+.endmacro
 
-L864D:		.byte		$13
-		.byte		$00
-		.byte		$93
-		.byte		$00
-		.byte		$00
-		.byte		$00
-		.byte		$13
-		.byte		$07
-		.byte		$94
-		.byte		$00
-		.byte		$00
-		.byte		$00
+L8635:		.byte		VDU_VIEWPORT
+		.byte		0
+		varchar		_var_7A
+		varchar		_cols
+		varchar		_var_7B
+		.byte		VDU_HOME
+		.byte		VDU_UP
+		.byte		VDU_RESTORE
+		.byte		VDU_TAB_XY
+		varchar		_var_7C
+		varchar		_var_7D
 
-L8659:		.byte		$17
-		.byte		$60
-		.byte		$30
-		.byte		$18
-		.byte		$0C
-		.byte		$00
-		.byte		$00
-		.byte		$00
-		.byte		$00
-		.byte		$00
+L8640:		.byte		VDU_VIEWPORT
+		.byte		0
+		varchar		_var_7E
+		varchar		_cols
+		varchar		_var_7F
+		.byte		VDU_TAB_XY
+		.byte		0
+		varchar		_var_81
+		.byte		VDU_DOWN
+		.byte		VDU_RESTORE
+		.byte		VDU_TAB_XY
+		varchar		_var_80
+		varchar		_var_82
 
-L8663:		ldx		#(_strings - _strings)
-		jsr		OutString
+_s_set_palette:	.byte		VDU_PALETTE
+		.byte		0
+		varchar		_palette_fg
+		.byte		0
+		.byte		0
+		.byte		0
+		.byte		VDU_PALETTE
+		.byte		7
+		varchar		_palette_bg
+		.byte		0
+		.byte		0
+		.byte		0
 
-L8668:		; tab to 25, 5
+_s_set_char:	.byte		VDU_23
+		.byte		96
+		.byte		%00110000
+		.byte		%00011000
+		.byte		%00001100
+		.byte		%00000000
+		.byte		%00000000
+		.byte		%00000000
+		.byte		%00000000
+		.byte		%00000000
+
+;----------------------------------------------------------------------
+;
+; Changes to MODE 7 and displays a menu with the current settings
+;
+.proc		ShowSettings
+
+		ldx		#(_strings - _strings)
+		jsr		_out
+
+@settings:	; tab to 25, 5
 		ldx		#(_s_tab_25_5 - _strings)
-		jsr		OutString
+		jsr		_out
 
 		; show the screen mode
 		lda		_mode
@@ -1120,7 +1424,7 @@ L8668:		; tab to 25, 5
 
 		; tab to 25, 7
 		ldx		#(_s_tab_25_7 - _strings)
-		jsr		OutString
+		jsr		_out
 
 		; display baud rate
 		lda		_baud
@@ -1131,19 +1435,19 @@ L8668:		; tab to 25, 5
 		clc
 		adc		#(_s_baud_table - _strings) - 6
 		tax
-		jsr		OutString
+		jsr		_out
 
 		; tab to 25, 9
 		ldx		#(_s_tab_25_9 - _strings)
-		jsr		OutString
+		jsr		_out
 
-		; show flow control
-		lda		$86
+		; show handshake setting
+		lda		_handshake
 		beq		@hardware
 		ldx		#(_s_xon_xoff - _strings)
 		jmp		@handshake
 @hardware:	ldx		#(_s_hardware - _strings)
-@handshake:	jsr		OutString
+@handshake:	jsr		_out
 
 @loop:		; enable keyboard and serial input and read a keyboard character
 		lda		#$02
@@ -1176,25 +1480,30 @@ L8668:		; tab to 25, 5
 		txa
 		and		#$07
 		sta		$88
-		jmp		L8668
+		jmp		@settings
 
 @set_speed:	lda		_baud
 		and		#$07
 		tax
 		inx
 		stx		$87
-		jmp		L8668
+		jmp		@settings
 
-@set_handshake:	lda		$86
+@set_handshake:	lda		_handshake
 		eor		#$01
-		sta		$86
-		jmp		L8668
+		sta		_handshake
+		jmp		@settings
 
 @basic:		jmp		StartBASIC
 
-@emulator:	jmp		LangEntry::L809C
+@emulator:	jmp		LangEntry::Main
 
-.proc		OutString
+;----------------------------------------------------------------------
+;
+; nested procedure that displays the NUL-terminated
+; string at offset X from the _strings label
+;
+.proc		_out
 
 @loop:		lda		_strings,X
 		beq		@exit
@@ -1241,6 +1550,7 @@ _s_hardware:	.byte		"hardware",0
 
 _s_xon_xoff:	.byte		"xon/xoff",0
 
+.endproc
 		.repeat		$8800 - *
 		.byte		$00
 		.endrep
