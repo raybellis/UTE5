@@ -23,6 +23,10 @@
 ; Zero page variables
 ;
 		_xoff		:= $70
+		_var_71		:= $71
+		_var_72		:= $72
+		_var_73		:= $73
+		_var_74		:= $74
 		_next		:= $75
 		_cursor_x	:= $76
 		_cursor_y	:= $77
@@ -138,7 +142,7 @@ Copyright:	.byte		"(C) Clive D. Rodgers 1985",0
 @l2:	    	inx
 		iny
 		lda		_ute5,X
-		bmi		@start
+		bmi		@lang
 		cmp		(VEC_STAR_CMD),Y
 		beq		@l2
 
@@ -150,7 +154,7 @@ Copyright:	.byte		"(C) Clive D. Rodgers 1985",0
 		rts
 
 		; enter language ROM
-@start:		lda		#$8E
+@lang:		lda		#$8E
 		ldx		$F4
 		jsr		OSBYTE
 
@@ -172,8 +176,8 @@ _ute5:		.byte		"UTE5", $FF
 		; set default parameters
 		lda		#$00
 		sta		_xoff
-		sta		$72
-		sta		$73
+		sta		_var_72
+		sta		_var_73
 		sta		_handshake
 		sta		_mode
 
@@ -234,7 +238,7 @@ Main:		jsr		SetSerialRate
 		lda		#$E3
 		jsr		OSBYTE
 
-		; set shift-control function key status to soft key key
+		; set shift-control function key status to soft key mode
 		ldy		#$00
 		ldx		#$01
 		lda		#$E4
@@ -259,10 +263,10 @@ Main:		jsr		SetSerialRate
 		and		#$7F
 		cmp		#' '
 		bcs		@l2
-		jsr		L82B9
+		jsr		DoControl
 		jmp		@mainloop
 
-@l2:		ldx		$72
+@l2:		ldx		_var_72
 		bne		@l3
 		jsr		OSWRCH
 		jmp		@mainloop
@@ -366,7 +370,7 @@ Main:		jsr		SetSerialRate
 
 @exit:		rts
 
-@table:		.byte		ESC,'A'
+@table:		.byte		ESC,'A'		; f0
 		.byte		ESC,'B'
 		.byte		ESC,'C'
 		.byte		ESC,'D'
@@ -375,13 +379,13 @@ Main:		jsr		SetSerialRate
 		.byte		ESC,'G'
 		.byte		ESC,'H'
 		.byte		ESC,'I'
-		.byte		ESC,'J'
-		.byte		$00,$00
-		.byte		ESC,'K'
-		.byte		$00,$02
-		.byte		$00,$06
-		.byte		$00,$0E
-		.byte		$00,$10
+		.byte		ESC,'J'		; f9
+		.byte		$00,$00		; break
+		.byte		ESC,'K'		; copy
+		.byte		$00,$02		; left
+		.byte		$00,$06		; right
+		.byte		$00,$0E		; down
+		.byte		$00,$10		; up
 		.byte		ESC,'a'
 		.byte		ESC,'b'
 		.byte		ESC,'c'
@@ -432,7 +436,7 @@ Main:		jsr		SetSerialRate
 		adc		_cols
 		sec
 		sbc		_cursor_x
-		sta		$74
+		sta		_var_74
 
 		lda		_next
 		cmp		#$7F
@@ -452,7 +456,7 @@ Main:		jsr		SetSerialRate
 		jsr		OSWRCH
 		pla
 		sta		_next
-		dec		$74
+		dec		_var_74
 		bne		@l1
 
 		; move cursor right
@@ -497,8 +501,8 @@ Main:		jsr		SetSerialRate
 		jsr		OSWRCH
 		lda		#VDU::RIGHT
 		jsr		OSWRCH
-		dec		$74
-		bne		L8233
+		dec		_var_74
+		bne		@l1
 		lda		#VDU::LEFT
 		jsr		OSWRCH
 		lda		#' '
@@ -609,7 +613,7 @@ SendXDone:	rts
 
 ;----------------------------------------------------------------------
 
-.proc		L82B9
+.proc		DoControl
 		asl		A
 		tax
 		lda		@jmp,X
@@ -629,7 +633,7 @@ SendXDone:	rts
 
 @l2:		jsr		GetNext
 		jsr		OSWRCH
-		dec		$71
+		dec		_var_71
 		bne		@l2
 		rts
 
@@ -661,7 +665,7 @@ SendXDone:	rts
 		.word		$0008
 		.word		$0005
 		.word		$0000
-		.word		L8322
+		.word		DoEscape
 		.word		SetViewport
 		.word		$0004
 		.word		$0000
@@ -671,7 +675,7 @@ SendXDone:	rts
 
 ;----------------------------------------------------------------------
 
-.proc		L8322
+.proc		DoEscape
 
 		jsr		GetNext
 		and		#$1F
@@ -692,7 +696,7 @@ SendXDone:	rts
 		.word		Noop
 		.word		Noop
 		.word		Noop
-		.word		L8399
+		.word		SetHandshake
 		.word		L83A1
 		.word		Noop
 		.word		Noop
@@ -760,7 +764,7 @@ Noop:		rts
 
 ;----------------------------------------------------------------------
 
-.proc		L8399
+.proc		SetHandshake
 
 		jsr		GetNext
 		and		#$01
@@ -786,7 +790,7 @@ Noop:		rts
 
 .proc		L83A8
 
-		sta		$72
+		sta		_var_72
 		lda		VDU_STATUS
 		eor		#$02
 		sta		VDU_STATUS
@@ -941,7 +945,7 @@ Noop:		rts
 		jsr		OSBYTE
 		stx		_var_7C
 		sty		_var_7B
-		sty		$7D
+		sty		_var_7D
 		lda		_rows
 		sta		_var_7A
 
@@ -1098,10 +1102,10 @@ _mode_cols:	.byte		80 - 1
 
 		lda		#VDU::GVIEWPORT
 		jsr		OSWRCH
-		jsr		GetCoord
-		jsr		GetCoord
-		jsr		GetCoord
-		jsr		GetCoord
+		jsr		GetCoord16
+		jsr		GetCoord16
+		jsr		GetCoord16
+		jsr		GetCoord16
 		rts
 
 .endproc
@@ -1115,8 +1119,8 @@ _mode_cols:	.byte		80 - 1
 		jsr		GetNext
 		and		#$3F
 		jsr		OSWRCH
-		jsr		GetCoord
-		jsr		GetCoord
+		jsr		GetCoord16
+		jsr		GetCoord16
 		rts
 
 .endproc
@@ -1131,8 +1135,8 @@ _mode_cols:	.byte		80 - 1
 		and		#$3F
 		eor		#$40
 		jsr		OSWRCH
-		jsr		GetCoord
-		jsr		GetCoord
+		jsr		GetCoord16
+		jsr		GetCoord16
 		rts
 
 .endproc
@@ -1143,15 +1147,15 @@ _mode_cols:	.byte		80 - 1
 
 		lda		#VDU::ORIGIN
 		jsr		OSWRCH
-		jsr		GetCoord
-		jsr		GetCoord
+		jsr		GetCoord16
+		jsr		GetCoord16
 		rts
 
 .endproc
 
 ;----------------------------------------------------------------------
 
-.proc		GetCoord
+.proc		GetCoord16
 
 		jsr		GetNext
 		and		#$3F
