@@ -48,10 +48,13 @@
 ;
 ; Other constants
 ;
+
+		; ASCII
 		XON		= $11
 		XOFF		= $13
 		ESC		= $1B
 
+		; MOS VDU sequence
 .scope		VDU
 		TEXT		= 4
 		LEFT		= 8
@@ -73,6 +76,7 @@
 		TAB_XY		= 31
 .endscope
 
+		; MOS BAUD rate settings
 		BAUD_9600	= 7
 
 ;----------------------------------------------------------------------
@@ -114,7 +118,7 @@ Copyright:	.byte		"(C) Clive D. Rodgers 1985",0
 		pla
 		rts
 
-@help:		ldx		#$ff
+@help:		ldx		#$FF
 @l1:		inx
 		lda		Header::Title,x
 		jsr		OSASCI
@@ -129,7 +133,7 @@ Copyright:	.byte		"(C) Clive D. Rodgers 1985",0
 		txa
 		pha
 
-		ldx		#$ff
+		ldx		#$FF
 		dey
 @l2:	    	inx
 		iny
@@ -146,7 +150,7 @@ Copyright:	.byte		"(C) Clive D. Rodgers 1985",0
 		rts
 
 		; enter language ROM
-@start:		lda		#$8e
+@start:		lda		#$8E
 		ldx		$F4
 		jsr		OSBYTE
 
@@ -207,30 +211,30 @@ Main:		jsr		SetSerialRate
 		ldx		#$30
 		jsr		OSBYTE
 
-		; disable cursor editing
+		; disable cursor editing and enable soft keys
 		ldx		#$02
 		lda		#$04
 		jsr		OSBYTE
 
-		; set function key status
+		; set function key status to base $80
 		ldy		#$00
 		ldx		#$80
 		lda		#$E1
 		jsr		OSBYTE
 
-		; set shift function key status
+		; set shift function key status to base $90
 		ldy		#$00
 		ldx		#$90
 		lda		#$E2
 		jsr		OSBYTE
 
-		; set control function key status
+		; set control function key status to base $A0
 		ldy		#$00
 		ldx		#$A0
 		lda		#$E3
 		jsr		OSBYTE
 
-		; set shift-control function key status
+		; set shift-control function key status to soft key key
 		ldy		#$00
 		ldx		#$01
 		lda		#$E4
@@ -299,11 +303,13 @@ Main:		jsr		SetSerialRate
 		bne		@not_esc
 		jsr		CheckCtrlEsc
 
-@not_esc:	jsr		L816F
+@not_esc:	; handle FN key mapping
+		jsr		CheckFNKeys
 		tay
 		jsr		WriteToBuffer
 
-@no_data:	jsr		CheckSerial
+@no_data:	; check serial buffer status
+		jsr		CheckSerial
 		cpx		#$01
 		bcc		GetNext
 
@@ -331,76 +337,83 @@ Main:		jsr		SetSerialRate
 
 ;----------------------------------------------------------------------
 
-.proc		L816F
+.proc		CheckFNKeys
 
+		; low characters are ignored
 		cmp		#$80
-		bcc		@l2
+		bcc		@exit
+
+		; double A and save
 		asl		A
 		tax
 		pha
+
+		; look up in table, branch if zero
 		ldy		@table,X
 		beq		@l1
 
+		; send ESC-o
 		ldy		#ESC
 		jsr		WriteToBuffer
 		ldy		#'o'
 		jsr		WriteToBuffer
 
-@l1:		pla
+@l1:		; look up next character from table and return it
+		pla
 		tax
 		inx
 		lda		@table,X
 
-@l2:		rts
+@exit:		rts
 
-@table:		.byte		$1B,$41
-		.byte		$1B,$42
-		.byte		$1B,$43
-		.byte		$1B,$44
-		.byte		$1B,$45
-		.byte		$1B,$46
-		.byte		$1B,$47
-		.byte		$1B,$48
-		.byte		$1B,$49
-		.byte		$1B,$4A
+@table:		.byte		ESC,'A'
+		.byte		ESC,'B'
+		.byte		ESC,'C'
+		.byte		ESC,'D'
+		.byte		ESC,'E'
+		.byte		ESC,'F'
+		.byte		ESC,'G'
+		.byte		ESC,'H'
+		.byte		ESC,'I'
+		.byte		ESC,'J'
 		.byte		$00,$00
-		.byte		$1B,$4B
+		.byte		ESC,'K'
 		.byte		$00,$02
 		.byte		$00,$06
 		.byte		$00,$0E
 		.byte		$00,$10
-		.byte		$1B,$61
-		.byte		$1B,$62
-		.byte		$1B,$63
-		.byte		$1B,$64
-		.byte		$1B,$65
-		.byte		$1B,$66
-		.byte		$1B,$67
-		.byte		$1B,$68
-		.byte		$1B,$69
-		.byte		$1B,$6A
+		.byte		ESC,'a'
+		.byte		ESC,'b'
+		.byte		ESC,'c'
+		.byte		ESC,'d'
+		.byte		ESC,'e'
+		.byte		ESC,'f'
+		.byte		ESC,'g'
+		.byte		ESC,'h'
+		.byte		ESC,'i'
+		.byte		ESC,'j'
 		.byte		$00,$00
-		.byte		$1B,$6B
-		.byte		$1B,$6C
-		.byte		$1B,$6D
-		.byte		$1B,$6E
-		.byte		$1B,$6F
-		.byte		$1B,$30
-		.byte		$1B,$31
-		.byte		$1B,$32
-		.byte		$1B,$33
-		.byte		$1B,$34
-		.byte		$1B,$35
-		.byte		$1B,$36
-		.byte		$1B,$37
-		.byte		$1B,$38
-		.byte		$1B,$39
+		.byte		ESC,'k'
+		.byte		ESC,'l'
+		.byte		ESC,'m'
+		.byte		ESC,'n'
+		.byte		ESC,'o'
+		.byte		ESC,'0'
+		.byte		ESC,'1'
+		.byte		ESC,'2'
+		.byte		ESC,'3'
+		.byte		ESC,'4'
+		.byte		ESC,'5'
+		.byte		ESC,'6'
+		.byte		ESC,'7'
+		.byte		ESC,'8'
+		.byte		ESC,'9'
 		.byte		$00,$00
-		.byte		$1B,$3A
-		.byte		$1B,$3B
-		.byte		$1B,$3C
-		.byte		$1B,$3D
-		.byte		$1B,$3E
+		.byte		ESC,':'
+		.byte		ESC,';'
+		.byte		ESC,'<'
+		.byte		ESC,'='
+		.byte		ESC,'>'
 
 .endproc
 
@@ -765,15 +778,11 @@ Noop:		rts
 
 .endproc	; fallthrough
 
-;----------------------------------------------------------------------
-
 .proc		L83A6
 
 		lda		#$00
 
 .endproc	; fallthrough
-
-;----------------------------------------------------------------------
 
 .proc		L83A8
 
