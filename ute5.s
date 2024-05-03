@@ -24,10 +24,10 @@
 ;
 		_xoff		:= $70
 		_var_71		:= $71
-		_var_72		:= $72
+		_insert_mode	:= $72
 		_var_73		:= $73
-		_var_74		:= $74
-		_next		:= $75
+		_edit_cols	:= $74
+		_serial_in	:= $75
 		_cursor_x	:= $76
 		_cursor_y	:= $77
 		_jmp_vec	:= $78
@@ -176,7 +176,7 @@ _ute5:		.byte		"UTE5", $FF
 		; set default parameters
 		lda		#$00
 		sta		_xoff
-		sta		_var_72
+		sta		_insert_mode
 		sta		_var_73
 		sta		_handshake
 		sta		_mode
@@ -254,31 +254,31 @@ Main:		jsr		SetSerialRate
 		; define the back-tick soft character
 		ldx		#$0A
 		ldy		#$00
-@l1:		lda		_s_set_char,Y
+:		lda		_s_set_char,Y
 		jsr		OutVarChar
-		bne		@l1
+		bne		:-
 
-		; main input processing loop
-@mainloop:	jsr		GetNext
+		; main serial input processing loop
+@main_loop:	jsr		GetSerial
 		and		#$7F
 		cmp		#' '
-		bcs		@l2
+		bcs		@not_ctrl
 		jsr		DoControl
-		jmp		@mainloop
+		jmp		@main_loop
 
-@l2:		ldx		_var_72
-		bne		@l3
+@not_ctrl:	ldx		_insert_mode
+		bne		@insert
 		jsr		OSWRCH
-		jmp		@mainloop
+		jmp		@main_loop
 
-@l3:		jsr		L81EC
-		jmp		@mainloop
+@insert:	jsr		DoInsert
+		jmp		@main_loop
 
 .endproc
 
 ;----------------------------------------------------------------------
 
-.proc		GetNext
+.proc		GetSerial
 
 		; read serial output buffer status
 		lda		#$80
@@ -315,14 +315,14 @@ Main:		jsr		SetSerialRate
 @no_data:	; check serial buffer status
 		jsr		CheckSerial
 		cpx		#$01
-		bcc		GetNext
+		bcc		GetSerial
 
 		; enable serial and read character
 		lda		#$02
 		ldx		#$01
 		jsr		OSBYTE
 		jsr		OSRDCH
-		sta		_next
+		sta		_serial_in
 
 		rts
 
@@ -354,7 +354,7 @@ Main:		jsr		SetSerialRate
 
 		; look up in table, branch if zero
 		ldy		@table,X
-		beq		@l1
+		beq		@not_esc
 
 		; send ESC-o
 		ldy		#ESC
@@ -362,7 +362,7 @@ Main:		jsr		SetSerialRate
 		ldy		#'o'
 		jsr		WriteToBuffer
 
-@l1:		; look up next character from table and return it
+@not_esc:	; look up next character from table and return it
 		pla
 		tax
 		inx
@@ -423,7 +423,7 @@ Main:		jsr		SetSerialRate
 
 ;----------------------------------------------------------------------
 
-.proc		L81EC
+.proc		DoInsert
 
 		; get cursor position
 		lda		#$86
@@ -431,35 +431,44 @@ Main:		jsr		SetSerialRate
 		stx		_cursor_x
 		sty		_cursor_y
 
+		; calculate how many columns are left
 		clc
 		lda		#$01
 		adc		_cols
 		sec
 		sbc		_cursor_x
-		sta		_var_74
+		sta		_edit_cols
 
-		lda		_next
+		; check if the character was DEL
+		lda		_serial_in
 		cmp		#$7F
-		beq		L822E
+		beq		DoBackspace
 
-@l1:		; read character at cursor
+@loop:		; read character at cursor
 		lda		#$87
 		jsr		OSBYTE
 		txa
 
-		; if unknown replace with space
-		bne		@l2
+		; use space if unrecognised
+		bne		@replace
 		lda		#' '
 
-@l2:		pha
-		lda		_next
-		jsr		OSWRCH
-		pla
-		sta		_next
-		dec		_var_74
-		bne		@l1
+@replace:	; remember the character at the cursor
+		pha
 
-		; move cursor right
+		; replace it with the character from previous iteration
+		lda		_serial_in
+		jsr		OSWRCH
+
+		; restore A, saving it for the next iteration
+		pla
+		sta		_serial_in
+
+		; and loop until the final column
+		dec		_edit_cols
+		bne		@loop
+
+		; move cursor right of original position
 		lda		#VDU::TAB_XY
 		jsr		OSWRCH
 		inc		_cursor_x
@@ -473,42 +482,39 @@ Main:		jsr		SetSerialRate
 
 ;----------------------------------------------------------------------
 
-.proc		L822E
+.proc		DoBackspace
 
+		; make sure we're not in column zero
 		lda		_cursor_x
-		bne		L8233
+		bne		@loop
 		rts
 
-.endproc
-
-;----------------------------------------------------------------------
-
-.proc		L8233
-
-@l1:		; read character at cursor
+@loop:		; read character at cursor
 		lda		#$87
 		jsr		OSBYTE
 		txa
 
-		; replace with space if not recognised
-		bne		@l2
+		; use space if not recognised
+		bne		@replace
 		lda		#' '
 
-@l2:		pha
+@replace:	pha
 		lda		#VDU::LEFT
 		jsr		OSWRCH
 		pla
 		jsr		OSWRCH
 		lda		#VDU::RIGHT
 		jsr		OSWRCH
-		dec		_var_74
-		bne		@l1
+		dec		_edit_cols
+		bne		@loop
+
+		; erase final character on the line
 		lda		#VDU::LEFT
 		jsr		OSWRCH
 		lda		#' '
 		jsr		OSWRCH
 
-		; move cursor left
+		; move cursor left of original position
 		lda		#VDU::TAB_XY
 		jsr		OSWRCH
 		dec		_cursor_x
@@ -560,11 +566,11 @@ Main:		jsr		SetSerialRate
 
 		; finish if using hardware handshake
 		lda		_handshake
-		bne		@l1
+		bne		@send_xon
 		rts
 
 		; send XON if buffer space is available
-@l1:		cpx		_buffer_max
+@send_xon:	cpx		_buffer_max
 		bcc		SendXON
 
 .endproc	; or fall through and send XOFF
@@ -624,14 +630,14 @@ SendXDone:	rts
 		sta		_jmp_vec + 1
 		jmp		(_jmp_vec)
 
-@l1:		lda		_next
+@l1:		lda		_serial_in
 		and		#$1F
 		jsr		OSWRCH
 		lda		_jmp_vec
 		bne		@l2
 		rts
 
-@l2:		jsr		GetNext
+@l2:		jsr		GetSerial
 		jsr		OSWRCH
 		dec		_var_71
 		bne		@l2
@@ -677,7 +683,7 @@ SendXDone:	rts
 
 .proc		DoEscape
 
-		jsr		GetNext
+		jsr		GetSerial
 		and		#$1F
 		asl		A
 		tax
@@ -697,13 +703,13 @@ SendXDone:	rts
 		.word		Noop
 		.word		Noop
 		.word		SetHandshake
-		.word		L83A1
+		.word		SetInsertOn
 		.word		Noop
 		.word		Noop
 		.word		SetBaud
 		.word		Noop
 		.word		Noop
-		.word		L83A6
+		.word		SetInsertOff
 		.word		Noop
 		.word		SetBackground
 		.word		SetGBackground
@@ -766,7 +772,7 @@ Noop:		rts
 
 .proc		SetHandshake
 
-		jsr		GetNext
+		jsr		GetSerial
 		and		#$01
 		sta		_handshake
 		rts
@@ -775,22 +781,24 @@ Noop:		rts
 
 ;----------------------------------------------------------------------
 
-.proc		L83A1
+.proc		SetInsertOn
 
 		lda		#$01
-		jmp		L83A8
+		jmp		SetInsert
 
 .endproc	; fallthrough
 
-.proc		L83A6
+.proc		SetInsertOff
 
 		lda		#$00
 
 .endproc	; fallthrough
 
-.proc		L83A8
+.proc		SetInsert
 
-		sta		_var_72
+		sta		_insert_mode
+
+		; toggle scroll mode
 		lda		VDU_STATUS
 		eor		#$02
 		sta		VDU_STATUS
@@ -802,7 +810,7 @@ Noop:		rts
 
 .proc		SetBaud
 
-		jsr		GetNext
+		jsr		GetSerial
 		and		#$0F
 		sta		_baud
 		jsr		SetSerialRate
@@ -816,7 +824,7 @@ Noop:		rts
 
 		lda		#VDU::COLOUR
 		jsr		OSWRCH
-		jsr		GetNext
+		jsr		GetSerial
 		and		#$0F
 		eor		#$80
 		jsr		OSWRCH
@@ -830,7 +838,7 @@ Noop:		rts
 
 		lda		#VDU::COLOUR
 		jsr		OSWRCH
-		jsr		GetNext
+		jsr		GetSerial
 		and		#$0F
 		jsr		OSWRCH
 		rts
@@ -843,10 +851,10 @@ Noop:		rts
 
 		lda		#VDU::GCOL
 		jsr		OSWRCH
-		jsr		GetNext
+		jsr		GetSerial
 		and		#$07
 		jsr		OSWRCH
-		jsr		GetNext
+		jsr		GetSerial
 		and		#$0F
 		jsr		OSWRCH
 		rts
@@ -859,10 +867,10 @@ Noop:		rts
 
 		lda		#VDU::GCOL
 		jsr		OSWRCH
-		jsr		GetNext
+		jsr		GetSerial
 		and		#$07
 		jsr		OSWRCH
-		jsr		GetNext
+		jsr		GetSerial
 		and		#$0F
 		eor		#$80
 		jsr		OSWRCH
@@ -929,9 +937,9 @@ Noop:		rts
 
 		ldx		#$0C
 		ldy		#$00
-@loop:		lda		_s_set_palette,Y
+:		lda		_s_set_palette,Y
 		jsr		OutVarChar
-		bne		@loop
+		bne		:-
 		rts
 
 .endProc
@@ -949,11 +957,12 @@ Noop:		rts
 		lda		_rows
 		sta		_var_7A
 
+		; send VDU string
 		ldx		#$0B
 		ldy		#$00
-@loop:		lda		_s_vc1,Y
+:		lda		_s_vc1,Y
 		jsr		OutVarChar
-		bne		@loop
+		bne		:-
 		rts
 
 .endproc
@@ -965,19 +974,21 @@ Noop:		rts
 		; get cursor position
 		lda		#$86
 		jsr		OSBYTE
-		stx		$80
+		stx		_var_80
 		sty		_var_7F
-		sty		$82
+		sty		_var_82
 		lda		_rows
 		sta		_var_7E
 		sec
 		sbc		_var_7F
-		sta		$81
+		sta		_var_81
+
+		; send VDU string
 		ldx		#$0D
 		ldy		#$00
-@loop:		lda		_s_vc2,Y
+:		lda		_s_vc2,Y
 		jsr		OutVarChar
-		bne		@loop
+		bne		:-
 		rts
 
 .endproc
@@ -1002,10 +1013,10 @@ Noop:		rts
 
 		lda		#$13
 		jsr		OSWRCH
-		jsr		GetNext
+		jsr		GetSerial
 		and		#$0F
 		jsr		OSWRCH
-		jsr		GetNext
+		jsr		GetSerial
 		and		#$0F
 		jsr		OSWRCH
 		lda		#$00
@@ -1032,13 +1043,13 @@ Noop:		rts
 		sec
 		sbc		_cursor_x
 		tax
-		beq		@l1
+		beq		l1
 
 		jsr		ToggleScroll
-@loop:		lda		#' '
+:		lda		#' '
 		jsr		OSWRCH
 		dex
-		bne		@loop
+		bne		:-
 		jsr		ToggleScroll
 
 		; reset cursor position
@@ -1049,7 +1060,7 @@ Noop:		rts
 		lda		_cursor_y
 		jsr		OSWRCH
 
-@l1:		; set serial receive rate
+l1:		; set serial receive rate
 		lda		#$07
 		ldx		_baud
 		jsr		OSBYTE
@@ -1064,7 +1075,7 @@ Noop:		rts
 		lda		#VDU::MODE
 		jsr		OSWRCH
 
-		jsr		GetNext
+		jsr		GetSerial
 		and		#$07
 		sta		_mode
 		jsr		OSWRCH
@@ -1116,7 +1127,7 @@ _mode_cols:	.byte		80 - 1
 
 		lda		#VDU::PLOT
 		jsr		OSWRCH
-		jsr		GetNext
+		jsr		GetSerial
 		and		#$3F
 		jsr		OSWRCH
 		jsr		GetCoord16
@@ -1131,7 +1142,7 @@ _mode_cols:	.byte		80 - 1
 
 		lda		#VDU::PLOT
 		jsr		OSWRCH
-		jsr		GetNext
+		jsr		GetSerial
 		and		#$3F
 		eor		#$40
 		jsr		OSWRCH
@@ -1157,7 +1168,7 @@ _mode_cols:	.byte		80 - 1
 
 .proc		GetCoord16
 
-		jsr		GetNext
+		jsr		GetSerial
 		and		#$3F
 		pha
 		lsr		A
@@ -1171,7 +1182,7 @@ _mode_cols:	.byte		80 - 1
 		asl		A
 		asl		A
 		sta		$77
-		jsr		GetNext
+		jsr		GetSerial
 		and		#$1F
 		eor		$77
 		jsr		OSWRCH
@@ -1194,9 +1205,9 @@ _mode_cols:	.byte		80 - 1
 		ora		#$F8
 		tax
 		lda		#VDU::RIGHT
-@loop:		jsr		OSWRCH
+:		jsr		OSWRCH
 		inx
-		bne		@loop
+		bne		:-
 		rts
 
 .endproc
@@ -1246,7 +1257,7 @@ _mode_cols:	.byte		80 - 1
 
 .proc		GetCoord8
 
-		jsr		GetNext
+		jsr		GetSerial
 		clc
 		adc		#$E0
 		and		#$7F
