@@ -1,0 +1,11 @@
+
+
+U0|ute0|ute0u|CDRs emulator in mode 0:\
+	:al=^N:ce=^U:\
+	:is=\ED^T\EU\ET:co#80:li#32:am:cl=^Z^L\ED:bs:bw:\
+	:kd=^N:kl=^B:kr=^F:ku=^P:\
+	:k0=\EoA:k1=\EoB:k2=\EoC:k3=\EoD:k4=\EoE:\
+	:k5=\EoF:k6=\EoG:k7=\EoH:k8=\EoI:k9=\EoJ:\
+	:nd=^F:up=^K:do=^J:ho=^^:pt:\
+	:cm=^_%r%+\40%+\40:\
+	:dl=^O:so=\ES:se=\ET:

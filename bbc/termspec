@@ -1,0 +1,147 @@
+			UNIX TERMINAL EMULATOR CODES
+
+	The codes are the same as the corresponding VDU calls (see bbc
+manual p377) except for those marked *. Some parameters are ANDed with a
+mask before being passed to vdu, so that the user can avoid passing
+control codes that might be changed by the output processing.  Items
+listed are: code; decimal equivalent; no of parameters (n), if any; AND
+mask; action.
+
+    code  n     masks   action
+
+   ^@  0  		ignored
+   ^A  1  1		send next char to the printer only
+   ^B  2		copy all screen output to the printer
+   ^C  3		switch off printer copy
+   ^D  4		write text at the text cursor. Also esc D.
+   ^E  5		write text at the grapics cursor
+*  ^F  6		move text cursor right one space
+   ^G  7		bell (not a beep!)
+   ^H  8		move text cursor left one space
+*  ^I  9		tab (set to eight spaces)
+   ^J 10		move text cursor down one line
+   ^K 11		move text cursor up one line 
+   ^L 12		clear screen and home cursor to top left
+   ^M 13		return
+*  ^N 14		open a line at the cursor, scroll lower half down
+*  ^O 15		delete line at cursor, scroll lower half up
+   ^P 16		clear graphics area
+   ^Q 17  1	15	set text foreground logical colour (see esc Q)
+   ^R 18  2 	7, 15	set grapics foreground logical colour (see esc R)
+   ^S 19  2	15, 15	set real-logical colour assignment (only 2 params)
+   ^T 20 		restore default colours
+*  ^U 21		delete to end of line
+   ^V 22  1	7	set screen mode
+   ^W 23  9		reprogram display character
+   ^X 24  8		define graphics window (see esc X)
+   ^Y 25  5		PLOT (see esc Y)
+   ^Z 26  		restore default windows
+*  ^[ 27		ESCAPE - introduces escape sequences
+*  ^\ 28  4	127*4	define text window. The params are posn + 32.
+   ^] 29  4		define graphics origin (see esc ])
+   ^^ 30 		home text cursor to top left
+*  ^_ 31  2	127*2	position text cursor. The params are posn + 32.
+
+
+			ESCAPE SEQUENCES
+
+esc A
+esc B			enter BASIC
+esc C
+esc D			same as ctrl/D 
+esc E
+esc F
+esc G
+esc H	1	1	set handshaking. 1 = xon/xoff, 0 = none.
+esc I
+esc J
+esc K			enter insert mode (doesnt work?)
+esc L	1	15	set line speed. 1 - 8 or A - H.
+esc M
+esc N
+esc O			leave insert mode (doesnt work?)
+esc P
+esc Q	1	15	set text background logical colour
+esc R	2	7,15	set graphics background logical colour
+esc S			enter stand out mode  
+esc T			leave stand out mode
+esc U			normal screen
+esc V			reverse video
+esc W
+esc X	8     (63,31)*4	define graphics window (t4010-type parameters)
+esx Y	5  63,(63,31)*4 plot k,x,y (t4010-type parameters) k<64
+esc Z   5  63,(63,31)*4 plot k+64,x,y (t4010-type parameters) 
+esc [
+esc \
+esc ]	4    (63,31)*2  define graphics origin (t4010-type parameters)
+esc ^
+esc _
+
+
+
+		RESTRICTIONS ON PARAMETERS
+
+	Unix does nasty things with your output if you are not careful.
+This emulator usually assumes that only 7 bits are meaningful, and strips
+off the 8th bit in case it is only a parity. Therefore those vdu codes
+that need the 8th bit, e.g. background colour setting and graphics
+addresses are provided for in an alternative manner. For background
+colour there are 'esc' sequences corresponding to the ctrl codes, which
+set the top bit for you.
+
+	Unix will not send ctrl/D unless you switch off output processing
+(by stty litout or raw), and will convert ctrl/J to cr/lf, and may
+convert ctrl/I to spaces. Therefore where only the lowest few bits are
+significant, e.g. in setting colours, these are masked out. You can send
+e.g. set line speed 1200 (4) by esc L D or esc L 4 rather than esc L ^D.
+To avoid this problem with text cursor addressing, an offset of 32 is
+used. For calls with text screen addresses (codes 28 and 31), 32
+must be added to the x and y values (originally in the range 0-79, 0-24
+or -31), so that control codes are not sent as parameters.
+
+	For calls with graphics screen addresses, escape sequences are
+provided in which the screen address is packed differently, so that they can
+get past the unix output processing. The vdu call needs <low byte> <high
+byte>.  The 't4014' style has the top 6 bits of the address in the low 6
+bits of the first byte, and the low 5 bits in the low 5 bits of the
+second byte. The top bits do not matter, but should not be zero.
+
+
+			FUNCTION KEYS
+
+The function keys, cursor and copy keys produce the following codes:
+
+function key:  f0 f1 f2 f3 f4 f5 f6 f7 f8 f9  copy  <   >   v   ^
+
+normal:		A  B  C  D  E  F  G  H  I  J   K   ^B  ^F  ^N  ^P
+shift:		a  b  c  d  e  f  g  h  i  j   k    l   m   n   o
+ctrl:		0  1  2  3  4  5  6  7  8  9   :    ;   <   =   >
+
+	These are all preceded by `esc' apart from the unshifted
+	cursor control keys, which are set for emacs.
+
+
+
+			    MENU
+
+A simple menu is available by pressing ctrl/ESC. This allows you to
+set speed, handshaking and screen mode, and to escape to BBC Basic.
+
+
+			FEATURES NEEDED
+
+download and upload BASIC programs, and possibly disk files
+
+option setting from the host - bits/parity/stopbits,
+
+fix sh/ctrl soft keys
+
+set function keys from host (Just send the fn key table)
+
+obeying bbc op system commands (do this via basic)
+
+there will be problems with insert mode if reverse video is used - give up,
+insert mode is too hard and too slow
+
+keyclick?
+

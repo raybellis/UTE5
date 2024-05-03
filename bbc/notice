@@ -1,0 +1,30 @@
+				U T E
+
+	A BBC MODEL B BASED COLOUR GRAPHICS TERMINAL FOR UNIX SYSTEMS
+
+	Most terminal emulator ROMs for the BBC model B microcomputer are
+emulations of the VT100 and Tektronix 4010 protocols. On studying the
+market when setting up a Unix based undergraduate teaching course, I came
+to the conclusion that all the available ROMs had one or more irritating
+features that made them undesirable. For example, some of them will boot
+up into a menu, rather than start as a terminal in the mode appropriate
+to your system.  The VT100 protocol is fine for screen editing, but does
+not have graphics. The Tektronix protocol is not bad for graphics, but
+poor for screen editing.  Swapping between the two is often tedious.
+
+	I therefore wrote a terminal ROM with Unix in mind, using all of
+the facilities of the BBC that can be described in a termcap entry. The
+result is sufficiently successful that I can offer it to other Unix users
+who have similar requirements to ours.
+
+	We can provide the Unix Terminal Emulator (UTE) customised to
+your normal initial requirements of BBC screen mode, line speed, and
+handshaking protocol (xon/xoff or hardware only), but there is a menu
+which allows you to change these in unusual circumstances, or to enter BBC
+Basic.
+
+	The ROM comes with a termcap entries for screen modes 0 and 3,
+and if you wish, a copy of the Emacs keys file that we use to assign the
+function keys to the editing commands that we find most useful.
+
+	

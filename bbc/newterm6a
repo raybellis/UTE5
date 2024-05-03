@@ -1,0 +1,268 @@
+
+  100DIM CODE 1000
+  200osb=&FFF4: osrdch=&FFE0: vdu=&FFEE
+  300FOR PASS= 0 TO 2 STEP 2
+  400P%=CODE
+  500[OPT PASS
+  600\
+  700\Clives Unix Terminal Emulator
+  800\
+  900\initialise things
+ 1000\
+ 1100lda #7: ldx baudrate: jsr osb   
+ 1200lda #8: ldx baudrate: jsr osb
+ 1300lda #229: ldx #1: jsr osb                \ignore escapes 
+ 1400lda #22: jsr vdu: lda mode: jsr vdu:    \set mode   
+ 1500lda #15: ldx #0: jsr osb:             \flush buffers
+ 1600 lda #202: ldx #48: jsr osb:           \clear caps lock
+ 1700\
+ 1800\main loop
+ 1900\
+ 2000.again
+ 2100 jsr nextchar: cmp #32: bcs screen:    \get char, is it ctrl?
+ 2200 jsr ctrl: jmp again: 
+ 2300.screen   
+ 2400 ldx insertmode: bne ins
+ 2500 jsr vdu: jmp again:
+ 2600.ins
+ 2700 jsr insert: jmp again
+ 2800\
+ 2900\get next rs423 char, checking keyboard
+ 3000\
+ 3100.nextchar
+ 3200 lda #128: ldx #253: ldy #255: jsr osb  \o/p buffer space?
+ 3300 cpx #2: bcc rs423in:
+ 3400 lda #128: ldx #255: ldy #255: jsr osb:
+ 3500 cpx #1: bcc rs423in:                   \char in keyboard?  
+ 3600 lda #2: ldx #2: jsr osb:               \select keyboard
+ 3700 jsr osrdch: cmp #27: bne rs423out:     \escape?
+ 3800 jsr ctrlesc
+ 3900 .rs423out
+ 4000 tay: lda #138: ldx line: jsr osb:      \send char to host 
+ 4100.rs423in
+ 4200 jsr checkinbuffer                      \in case ^s^q needed
+ 4300 cpx #1: bcc nextchar:                  \anything there? 
+ 4400 lda #2: ldx #1: jsr osb:               \select rs423
+ 4500 jsr osrdch: AND #127: sta char:  
+ 4600 rts
+ 4700\
+ 4800\insert mode routine
+ 4900\
+ 5000.insert
+ 5100 lda #134: jsr osb: stx x: sty y:         \where are we?   
+ 5200lda #80: sec: sbc x: sta inscount:        \how many to move?
+ 5300 lda char: cmp #127: beq delete           \are we deleting?
+ 5400\
+ 5500.insertloop
+ 5600 lda #135: jsr osb: txa:                  \get current char
+ 5700 bne insl1: lda #32:                      \replace by space if invalid
+ 5800.insl1: pha:                              \save it
+ 5900 lda char: jsr vdu:                       \send new char
+ 6000 pla: sta char:                           \ready old char
+ 6100 dec inscount: bne insertloop             \finished?
+ 6200 lda #31: jsr vdu: inc x:lda x: jsr vdu: lda y: jsr vdu: \reposn cursor  
+ 6300 rts:
+ 6400\
+ 6500.delete
+ 6600 lda x: bne deloop: rts                 \do nothing at start of line  
+ 6700.deloop
+ 6800 lda #135: jsr osb:                      \get char to move back 
+ 6900 txa: bne insl2: lda #32:                \valid?
+ 7000.insl2: pha:                             \save it
+ 7100 lda #8: jsr vdu: pla: jsr vdu:          \move back and write it
+ 7200 lda #9: jsr vdu
+ 7300 dec inscount: bne deloop
+ 7400 lda #8: jsr vdu: lda #32: jsr vdu:
+ 7500 lda #31: jsr vdu: dec x: lda x: jsr vdu: lda y: jsr vdu: \reposn cursor
+ 7600 rts
+ 7700\
+ 7800\user keyboard escape
+ 7900\include SETUP here later
+ 8000\
+ 8100.ctrlesc
+ 8200 lda #129: ldx #254: ldy #255: jsr osb:        \ctrl pressed?  
+ 8300 lda #27: inx: beq basic: rts:
+ 8400.basic
+ 8500 pla:pla:pla:pla: rts  
+ 8600\
+ 8700\check fullness of rs423 buffer
+ 8800\
+ 8900.checkinbuffer
+ 9000 lda #2: ldx #1: jsr osb:                     \select rs423  
+ 9100 lda #128: ldx #254: ldy #255: jsr osb:       \how full? 
+ 9200 lda handshake: bne checkfull: rts:           \do we need to?
+ 9300.checkfull
+ 9400 cpx toplimit: bcc notfull:
+ 9500 lda inhibited: bne checkdone:               \already sent ^s  
+ 9600 lda #1: sta inhibited:                       \set flag
+ 9700 lda #138: ldx #2: ldy #19: jsr osb:         \send ^s 
+ 9800 rts
+ 9900.notfull
+10000 cpx bottomlimit: bcs checkdone               \empty?
+10100 lda inhibited: beq checkdone:                \already sent ^q
+10200 lda #0: sta inhibited:                       \reset flag
+10300 lda #138: ldx #2: ldy #17: jsr osb:          \send ^q
+10400.checkdone
+10500 rts
+10600\
+10700\control character sequences
+10800\
+10900.ctrl
+11000 tax: lda table,X: bmi routine             \look up table 
+11100 sta count: lda char: jsr vdu:             \next n are params  
+11200 lda count: cmp #0: bne params: rts        \any params needed?
+11300 .params
+11400 jsr nextchar: jsr vdu: dec count: bne params  \send the params 
+11500 rts
+11600.routine
+11700 and #127: tax: lda ctrlist,X: sta addr1   \get first half
+11800 inx: lda ctrlist,X: sta addr2: jmp (addr1)\goto routine
+11900\
+12000.table
+12100: EQUB0: EQUB1: EQUB0: EQUB0
+12200: EQUB0: EQUB0: EQUB0: EQUB0
+12300: EQUB0: EQUB0: EQUB0: EQUB0
+12400: EQUB0: EQUB0: EQUB128: EQUB130
+12500: EQUB0: EQUB1: EQUB2: EQUB5
+12600: EQUB0: EQUB132: EQUB1: EQUB9  
+12700: EQUB8: EQUB5: EQUB0: EQUB134
+12800: EQUB4: EQUB4: EQUB0: EQUB2
+12900\
+13000.ctrlist
+13100: EQUWctrln    \open a line 
+13200: EQUWctrlo     \delete a line  
+13300: EQUWctrlu     \delete to end of line
+13400: EQUWescape    \escape sequence
+13500\
+13600\escape sequence
+13700.escape
+13900 jsr nextchar: and #31: asl A:          \wait for next char, mult by 2   
+14000tax: lda esctable,X: sta addr1:
+14100inx: lda esctable,X: sta addr2:           \look up routine address
+14300jmp (addr1)
+14400\
+14500.esctable
+14600:EQUWnull: EQUWnull:EQUWnull:EQUWnull:EQUWnull
+14700:EQUWnull:EQUWnull:EQUWnull:EQUWnull:EQUWesci
+14800:EQUWnull:EQUWnull:EQUWnull:EQUWnull:EQUWnull
+14900EQUWesco:EQUWnull:EQUWnull:EQUWnull:EQUWescs
+15000:EQUWesct:EQUWescu:EQUWescv:EQUWnull:EQUWnull 
+15100:EQUWnull:EQUWnull:EQUWnull:EQUWnull:EQUWnull
+15110:EQUWnull:EQUWnull:EQUWnull
+15200\
+15300\escape sequence routines
+15400\
+15500.null: rts
+15600.esci
+15700 lda #1: jmp escio                       \enter insert mode  
+15800.esco
+15900 lda #0:                                 \exit insert mode  
+15910.escio
+15920 sta insertmode: 
+15930 lda &D0: eor #2: sta &D0: rts:         \toggle scroll inhibit **OS dep**
+16000.escs
+16100 lda #17: jsr vdu: lda #0: jsr vdu:  
+16200lda #17: jsr vdu: lda #135: jsr vdu:
+16300rts:
+16400.esct
+16500lda #17: jsr vdu: lda #7: jsr vdu: 
+16600lda #17: jsr vdu: lda #128: jsr vdu: 
+16700rts
+16800.escu
+16900lda #7: sta vu1: lda #0: sta vu2: jmp escuv:
+17000.escv
+17100lda #0: sta vu1: lda #7: sta vu2
+17200.escuv
+17300 ldx #12: ldy #0:
+17400.escuvloop
+17500 lda vusequence,Y: jsr vdu: iny: dex: bne escuvloop
+17600rts
+17700\
+17800\open a line
+17900\
+18000.ctrln
+18100 lda #134: jsr osb:
+18200 stx linex: sty liney1: sty liney2:       \current cursor position  
+18300 lda pageln: sta maxy:                    \end of current window
+18400 ldx #11: ldy #0:
+18500.nloop
+18600 lda nsequence,Y: jsr vdu:               \send a vdu sequence
+18700 iny: dex: bne nloop:
+18800 rts
+18900\
+19000\delete a line and close up
+19100\
+19200.ctrlo
+19300 lda #134: jsr osb:
+19400 stx olinex: sty oliney1: sty oliney2:  \current cursor position
+19500 lda pageln: sta omaxy1: sec: 
+19600 sbc oliney1:  sta omaxy2:           \end of window    
+19700 ldx #13: ldy #0:
+19800.oloop
+19900 lda osequence,Y: jsr vdu:              \send vdu sequence
+20000 iny: dex: bne oloop
+20100 rts
+20200\
+20300\delete to end of line
+20400\
+20500.ctrlu
+20600 lda #134: jsr osb: 
+20700 sty y: stx x: 
+20800 lda #80: sec: sbc x: tax: beq uend: \calculate how many to delete 
+20900.uloop
+21000 lda #32: jsr vdu: dex: bne uloop     \output n spaces
+21100 lda #31: jsr vdu: lda x: jsr vdu:
+21200 lda y: jsr vdu:                      \put cursor back
+21300.uend
+21400 rts
+21500\
+21600\WORKING AREA AND TABLES
+21700\
+21800\single byte locations
+21900\
+22000.toplimit: EQUB200:
+22100.bottomlimit: EQUB50
+22200.inhibited: EQUB0:     \1 means ^s sent  
+22300.handshake: EQUB1   \0 means no ^s^q
+22400.baudrate: EQUB7    \default 9600
+22500.mode: EQUB3
+22600.pageln: EQUB24    \length minus one   
+22700.char: EQUB0      \just in case 
+22800.count: EQUB0    \counts params of ctrl sequences
+22900.x: EQUB0: .y: EQUB0:
+23000.insertmode: EQUB0 \insert mode =1 
+23100.dm: EQUB0       \delete mode =1
+23200 .line : EQUB2
+23300.addr1: EQUB0
+23400.addr2: EQUB0
+23500.inscount       \count used by insert loop
+23600\
+23700\vdu sequence to open a line
+23800.nsequence
+23900: EQUB28: EQUB0
+24000.maxy: EQUB0: EQUB79
+24100.liney1: EQUB0: EQUB30: EQUB11: EQUB26: EQUB31
+24200.linex: EQUB0
+24300.liney2: EQUB0
+24400\
+24500\vdu sequence to close a line
+24600.osequence
+24700: EQUB28: EQUB0
+24800.omaxy1: EQUB0: EQUB79
+24900.oliney1: EQUB0: EQUB31: EQUB0
+25000.omaxy2: EQUB0: EQUB10: EQUB26: EQUB31
+25100.olinex: EQUB0
+25200.oliney2: EQUB0
+25300\
+25400\vdu sequence for normal/inverse video
+25500.vusequence
+25600: EQUB19: EQUB0
+25700.vu1: EQUB7: EQUB0: EQUB0: EQUB0: EQUB19: EQUB7
+25800.vu2: EQUB0: EQUB0: EQUB0: EQUB0
+25900]
+26000NEXT PASS
+26100PRINT "READY?": A=GET
+26200CALL CODE
+26300 *FX229
+26400PRINT "EXIT FROM TERMINAL"
+>

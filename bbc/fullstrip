@@ -1,0 +1,172 @@
+___________________________________________________________________________
+
+
+
+
+                                                                 left
+
+                                                             --------------
+                                                      CTRL  |  PREVIOUS  |
+                                                            |   screen   |
+                       E M A C S                            |--------------
+                                                     SHIFT  |    START   |
+	             FUNCTION KEYS                          |   of line  |
+                                                            |--------------
+                                                    NORMAL  |    BACK    |
+                                                            |  character |
+                                                             -------------
+              f0           f1           f2           f3           f4
+         ------------------------------------------------------------------
+        |    PUSH    |            |            |    FILL    |   Append   |
+  CTRL  |  to shell  |            |            |   region   |  next kill |
+        |------------|------------|------------|------------|------------|-
+        |    STOP    |    WRITE   |    BACK    |  FORWARD   |    KILL    |  
+ SHIFT  |            |    file    |    word    |    word    |   region   | 
+        |------------|------------|------------|------------|------------|-
+        |    EXIT    |    SAVE    |   INSERT   |   DELETE   |    KILL    |
+NORMAL  |            |    file    |    file    |  at cursor |    line    |
+         ------------------------------------------------------------------
+_____________________________________________________________________________
+
+
+
+
+                                                                 left
+
+                                                             --------------
+                                                      CTRL  |  PREVIOUS  |
+                                                            |   screen   |
+                       E M A C S                            |--------------
+                                                     SHIFT  |    START   |
+	             FUNCTION KEYS                          |   of line  |
+                                                            |--------------
+                                                    NORMAL  |    BACK    |
+                                                            |  character |
+                                                             -------------
+              f0           f1           f2           f3           f4
+         ------------------------------------------------------------------
+        |    PUSH    |            |            |    FILL    |   Append   |
+  CTRL  |  to shell  |            |            |   region   |  next kill |
+        |------------|------------|------------|------------|------------|-
+        |    STOP    |    WRITE   |    BACK    |  FORWARD   |    KILL    |  
+ SHIFT  |            |    file    |    word    |    word    |   region   | 
+        |------------|------------|------------|------------|------------|-
+        |    EXIT    |    SAVE    |   INSERT   |   DELETE   |    KILL    |
+NORMAL  |            |    file    |    file    |  at cursor |    line    |
+         ------------------------------------------------------------------
+_____________________________________________________________________________
+
+
+
+
+                                                                 left
+
+                                                             --------------
+                                                      CTRL  |  PREVIOUS  |
+                                                            |   screen   |
+                       E M A C S                            |--------------
+                                                     SHIFT  |    START   |
+	             FUNCTION KEYS                          |   of line  |
+                                                            |--------------
+                                                    NORMAL  |    BACK    |
+                                                            |  character |
+                                                             -------------
+              f0           f1           f2           f3           f4
+         ------------------------------------------------------------------
+        |    PUSH    |            |            |    FILL    |   Append   |
+  CTRL  |  to shell  |            |            |   region   |  next kill |
+        |------------|------------|------------|------------|------------|-
+        |    STOP    |    WRITE   |    BACK    |  FORWARD   |    KILL    |  
+ SHIFT  |            |    file    |    word    |    word    |   region   | 
+        |------------|------------|------------|------------|------------|-
+        |    EXIT    |    SAVE    |   INSERT   |   DELETE   |    KILL    |
+NORMAL  |            |    file    |    file    |  at cursor |    line    |
+         ------------------------------------------------------------------
+_____________________________________________________________________________
+
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+_____________________________________________________________________________
+
+
+         CURSOR KEYS
+
+     right          up         down                     COPY key
+
+----------------------------------------              ------------
+ |    NEXT    |   START    |    END     |            |            |
+ |   screen   |    text    |    text    |            |            |
+-|------------|------------|------------|            |------------|
+ |    END     |    TOP     |   BOTTOM   |            |    COPY    |
+ |    line    |   screen   |   screen   |            |   region   |
+-|------------|------------|------------|            |------------|
+ |  FORWARD   |     UP     |    DOWN    |            |   REDRAW   |
+ |  character |    line    |    line    |            |   screen   |
+----------------------------------------              ------------
+       f5           f6           f7           f8           f9
+------------------------------------------------------------------
+ |   Quoted   |  Extended  |   Reverse  |   change   |    HELP    |  CTRL
+ |   INSERT   |  Command   |   SEARCH   |  directory |            |
+-|------------|------------|------------|------------|------------|
+ |   Query    |  EXCHANGE  | incremental|   ls -ls   |  apropos   |  SHIFT
+ |   REPLACE  |point & mark|   SEARCH   |            |            |
+-|------------|------------|------------|------------|------------|
+ |   UN-KILL  |  SET MARK  |   SEARCH   |    DIR     |  DESCRIBE  |  NORMAL
+ |            |            |            |            |    key     |
+------------------------------------------------------------------
+______________________________________________________________________________
+
+
+         CURSOR KEYS
+
+     right          up         down                     COPY key
+
+----------------------------------------              ------------
+ |    NEXT    |   START    |    END     |            |            |
+ |   screen   |    text    |    text    |            |            |
+-|------------|------------|------------|            |------------|
+ |    END     |    TOP     |   BOTTOM   |            |    COPY    |
+ |    line    |   screen   |   screen   |            |   region   |
+-|------------|------------|------------|            |------------|
+ |  FORWARD   |     UP     |    DOWN    |            |   REDRAW   |
+ |  character |    line    |    line    |            |   screen   |
+----------------------------------------              ------------
+       f5           f6           f7           f8           f9
+------------------------------------------------------------------
+ |   Quoted   |  Extended  |   Reverse  |   change   |    HELP    |  CTRL
+ |   INSERT   |  Command   |   SEARCH   |  directory |            |
+-|------------|------------|------------|------------|------------|
+ |   Query    |  EXCHANGE  | incremental|   ls -ls   |  apropos   |  SHIFT
+ |   REPLACE  |point & mark|   SEARCH   |            |            |
+-|------------|------------|------------|------------|------------|
+ |   UN-KILL  |  SET MARK  |   SEARCH   |    DIR     |  DESCRIBE  |  NORMAL
+ |            |            |            |            |    key     |
+------------------------------------------------------------------
+______________________________________________________________________________
+
+
+         CURSOR KEYS
+
+     right          up         down                     COPY key
+
+----------------------------------------              ------------
+ |    NEXT    |   START    |    END     |            |            |
+ |   screen   |    text    |    text    |            |            |
+-|------------|------------|------------|            |------------|
+ |    END     |    TOP     |   BOTTOM   |            |    COPY    |
+ |    line    |   screen   |   screen   |            |   region   |
+-|------------|------------|------------|            |------------|
+ |  FORWARD   |     UP     |    DOWN    |            |   REDRAW   |
+ |  character |    line    |    line    |            |   screen   |
+----------------------------------------              ------------
+       f5           f6           f7           f8           f9
+------------------------------------------------------------------
+ |   Quoted   |  Extended  |   Reverse  |   change   |    HELP    |  CTRL
+ |   INSERT   |  Command   |   SEARCH   |  directory |            |
+-|------------|------------|------------|------------|------------|
+ |   Query    |  EXCHANGE  | incremental|   ls -ls   |  apropos   |  SHIFT
+ |   REPLACE  |point & mark|   SEARCH   |            |            |
+-|------------|------------|------------|------------|------------|
+ |   UN-KILL  |  SET MARK  |   SEARCH   |    DIR     |  DESCRIBE  |  NORMAL
+ |            |            |            |            |    key     |
+------------------------------------------------------------------
+______________________________________________________________________________
