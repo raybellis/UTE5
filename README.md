@@ -1,7 +1,7 @@
 # UTE5
 
 This is a UNIX Terminal Emulator for the BBC Micro, written in the mid
-1980s by Clive M. Rodgers for the Oxford University Physics teaching
+1980s by Clive D. Rodgers for the Oxford University Physics teaching
 laboratory, where their two HLH Orion minicomputers were accessed from a
 lab full of BBC Micros with this emulator installed as the default
 language ROM.
