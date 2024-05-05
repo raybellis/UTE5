@@ -123,10 +123,10 @@ Copyright:	.byte		"(C) Clive D. Rodgers 1985",0
 		rts
 
 @help:		ldx		#$FF
-@l1:		inx
+:		inx
 		lda		Header::Title,x
 		jsr		OSASCI
-		bne		@l1
+		bne		:-
 
 		jsr		OSNEWL
 		pla
@@ -137,15 +137,17 @@ Copyright:	.byte		"(C) Clive D. Rodgers 1985",0
 		txa
 		pha
 
+		; compare supplied command to "UTE5"
 		ldx		#$FF
 		dey
-@l2:	    	inx
+:	    	inx
 		iny
 		lda		_ute5,X
 		bmi		@lang
 		cmp		(VEC_STAR_CMD),Y
-		beq		@l2
+		beq		:-
 
+		; no match - restore registers and return
 		pla
 		tax
 		pla
@@ -650,7 +652,7 @@ SendXDone:	rts
 		.word		$0000
 		.word		$0000
 		.word		$0000
-		.word		L859F
+		.word		DoCursorRight
 		.word		$0000
 		.word		$0000
 		.word		Tabstop
@@ -658,14 +660,14 @@ SendXDone:	rts
 		.word		$0000
 		.word		$0000
 		.word		$0000
-		.word		L8452
-		.word		L846E
-		.word		L848F
+		.word		OpenLine
+		.word		CloseLine
+		.word		ClearGraphics
 		.word		SetForeground
 		.word		SetGForeground
 		.word		SetPalette
 		.word		$0000
-		.word		L84BD
+		.word		ClearEOL
 		.word		SetMode
 		.word		$0009
 		.word		$0008
@@ -946,7 +948,7 @@ Noop:		rts
 
 ;----------------------------------------------------------------------
 
-.proc		L8452
+.proc		OpenLine
 
 		; get cursor position
 		lda		#$86
@@ -969,7 +971,7 @@ Noop:		rts
 
 ;----------------------------------------------------------------------
 
-.proc		L846E
+.proc		CloseLine
 
 		; get cursor position
 		lda		#$86
@@ -995,7 +997,7 @@ Noop:		rts
 
 ;----------------------------------------------------------------------
 
-.proc		L848F
+.proc		ClearGraphics
 
 		lda		_handshake
 		beq		@l1
@@ -1029,7 +1031,7 @@ Noop:		rts
 
 ;----------------------------------------------------------------------
 
-.proc		L84BD
+.proc		ClearEOL
 
 		; get current cursor position
 		lda		#$86
@@ -1037,14 +1039,18 @@ Noop:		rts
 		sty		_cursor_y
 		stx		_cursor_x
 
+		; calculate columns remaining
 		clc
 		lda		#$01
 		adc		_cols
 		sec
 		sbc		_cursor_x
+
+		; nothing to do if we're at the end of the line
 		tax
 		beq		l1
 
+		; output that many spaces
 		jsr		ToggleScroll
 :		lda		#' '
 		jsr		OSWRCH
@@ -1060,7 +1066,7 @@ Noop:		rts
 		lda		_cursor_y
 		jsr		OSWRCH
 
-l1:		; set serial receive rate
+l1:		; set serial receive rate (why?!)
 		lda		#$07
 		ldx		_baud
 		jsr		OSBYTE
@@ -1214,7 +1220,7 @@ _mode_cols:	.byte		80 - 1
 
 ;----------------------------------------------------------------------
 
-.proc		L859F
+.proc		DoCursorRight
 
 		lda		#VDU::RIGHT
 		jsr		OSWRCH
